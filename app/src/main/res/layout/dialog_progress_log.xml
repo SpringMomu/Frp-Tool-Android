@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <TextView
+        android:id="@+id/log_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="正在执行操作..."
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:textColor="?android:attr/textColorPrimary"
+        android:layout_marginBottom="16dp"/>
+
+    <ProgressBar
+        android:id="@+id/log_progress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:indeterminate="true"
+        android:layout_marginBottom="16dp"/>
+
+    <ScrollView
+        android:id="@+id/log_scrollview"
+        android:layout_width="match_parent"
+        android:layout_height="240dp"
+        android:background="#1E1E1E"
+        android:padding="8dp">
+
+        <TextView
+            android:id="@+id/log_content"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:typeface="monospace"
+            android:textIsSelectable="true"/>
+    </ScrollView>
+
+</LinearLayout>

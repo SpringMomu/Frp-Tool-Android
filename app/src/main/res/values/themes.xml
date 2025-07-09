@@ -1,0 +1,4 @@
+<resources>
+    <style name="Theme.FrpManager" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPendingBackground">#FFFDE7</item> </style>
+</resources>

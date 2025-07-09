@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:padding="24dp">
+
+    <LinearLayout
+        android:id="@+id/page_welcome"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:visibility="visible">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="服务器环境设置"
+            android:textAppearance="?attr/textAppearanceHeadline6" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="向导将帮助您自动完成所有必要的设置。"
+            android:textAlignment="center" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_start_setup"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="开始" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/page_firewall"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:visibility="gone">
+        <TextView
+            android:id="@+id/tv_firewall_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="防火墙建议"
+            android:textAppearance="?attr/textAppearanceHeadline6" />
+        <TextView
+            android:id="@+id/text_firewall_detected"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="已检测到您正在使用防火墙，请记得手动为FRP开放所需端口，或使用该软件的自动设置防火墙功能。"
+            android:textAlignment="center"
+            android:visibility="gone" />
+        <LinearLayout
+            android:id="@+id/layout_install_firewall"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:visibility="gone">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="为保障服务器安全，强烈建议您安装并配置防火墙。推荐使用 UFW (简单防火墙)。"
+                android:textAlignment="center" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_install_ufw"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="安装 UFW (推荐)" />
+        </LinearLayout>
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_continue_firewall"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="继续" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/page_frp_config"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:visibility="gone">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="FRP 通用配置"
+            android:textAppearance="?attr/textAppearanceHeadline6" />
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:hint="FRP服务器地址 (公网IP)">
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/et_frp_server_addr"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"/>
+        </com.google.android.material.textfield.TextInputLayout>
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:hint="FRP服务器端口 (默认7000)">
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/et_frp_server_port"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:text="7000"/>
+        </com.google.android.material.textfield.TextInputLayout>
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:hint="Token (选填)">
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/et_frp_token"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"/>
+        </com.google.android.material.textfield.TextInputLayout>
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_finish_setup"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="完成配置" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/page_progress"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone">
+        <TextView
+            android:id="@+id/tv_progress_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="正在配置服务器..."
+            android:textAppearance="?attr/textAppearanceHeadline6" />
+        <TextView
+            android:id="@+id/tv_setup_status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="请稍候..." />
+        <com.google.android.material.progressindicator.LinearProgressIndicator
+            android:id="@+id/progress_indicator_setup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:progress="0" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/page_completion"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:visibility="gone">
+        <ImageView
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:src="@drawable/outline_check_circle_24"
+            app:tint="?attr/colorPrimary" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="配置完成！"
+            android:textAppearance="?attr/textAppearanceHeadline6" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="服务器已准备就绪。" />
+    </LinearLayout>
+</FrameLayout>

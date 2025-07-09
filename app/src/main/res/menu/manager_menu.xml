@@ -1,0 +1,62 @@
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/action_search"
+        android:title="搜索"
+        android:icon="@android:drawable/ic_menu_search"
+        app:showAsAction="ifRoom|collapseActionView"
+        app:actionViewClass="androidx.appcompat.widget.SearchView" />
+
+    <item
+        android:id="@+id/action_refresh"
+        android:title="刷新"
+        android:icon="@android:drawable/ic_menu_rotate"
+        app:showAsAction="ifRoom" />
+
+    <item
+        android:id="@+id/action_apply_changes"
+        android:title="应用更改"
+        app:showAsAction="never"/>
+
+    <item
+        android:id="@+id/action_batch_create"
+        android:title="批量创建"
+        app:showAsAction="never"/>
+    <item
+        android:id="@+id/action_batch_start"
+        android:title="批量启动"
+        app:showAsAction="never"/>
+    <item
+        android:id="@+id/action_batch_stop"
+        android:title="批量暂停"
+        app:showAsAction="never"/>
+    <item
+        android:id="@+id/action_batch_delete"
+        android:title="批量删除"
+        app:showAsAction="never"/>
+    <item
+        android:id="@+id/action_range_delete"
+        android:title="范围删除"
+        app:showAsAction="never"/>
+
+    <item
+        android:id="@+id/action_batch_firewall_allow"
+        android:title="批量放行防火墙"
+        app:showAsAction="never"
+        android:visible="false" /> <item
+        android:id="@+id/action_batch_firewall_block"
+        android:title="批量阻止防火墙"
+        app:showAsAction="never"
+        android:visible="false" /> <item
+        android:id="@+id/action_select_all"
+        android:title="全选"
+        app:showAsAction="ifRoom"
+        android:visible="false" />
+    <item
+        android:id="@+id/action_invert_selection"
+        android:title="反选"
+        app:showAsAction="ifRoom"
+        android:visible="false" />
+
+</menu>

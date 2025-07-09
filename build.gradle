@@ -1,0 +1,28 @@
+buildscript {
+    
+    repositories {
+        mavenLocal()
+        maven { url "https://maven.aliyun.com/repository/public/" }
+        mavenCentral()
+        gradlePluginPortal()
+        maven { url "https://oss.sonatype.org/content/repositories/snapshots/" }
+        google()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.3.2'
+        
+    }
+}
+
+allprojects {
+    repositories {
+        mavenLocal()
+        maven { url "https://maven.aliyun.com/repository/public/" }
+        mavenCentral()
+        google()
+        gradlePluginPortal()
+        maven { url "https://oss.sonatype.org/content/repositories/snapshots/" }
+        maven { url "https://oss.sonatype.org/content/repositories/releases/" }
+        maven { url "https://jitpack.io" }
+    }
+}

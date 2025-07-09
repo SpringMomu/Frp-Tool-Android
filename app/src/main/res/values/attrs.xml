@@ -1,0 +1,4 @@
+<resources>
+    <attr name="colorPendingBackground" format="color" />
+	<attr name="colorWarning" format="color" />
+</resources>

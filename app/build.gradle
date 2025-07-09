@@ -1,0 +1,64 @@
+apply plugin: "com.android.application"
+
+android {
+	buildToolsVersion "34.0.0"
+	compileSdkVersion 34
+	
+	namespace "io.momu.frpmanager"
+	defaultConfig {
+		applicationId "io.momu.frpmanager"
+		minSdkVersion 26
+		targetSdkVersion 34
+		versionCode 1
+		versionName "1.2"
+	}
+	
+	compileOptions {
+		sourceCompatibility JavaVersion.VERSION_17
+		targetCompatibility JavaVersion.VERSION_17
+	}
+	
+	packaging {
+        resources {
+            pickFirsts.add("META-INF/versions/9/OSGI-INF/MANIFEST.MF")
+        }
+    }
+	
+	signingConfigs{
+		release{
+			keyAlias "AIDE+"
+			keyPassword "123789456"
+			storePassword "123789456"
+			storeFile file("app-release.jks")
+		}
+		debug{
+			keyAlias "androiddebug"
+			keyPassword "123789456"
+			storePassword "123789456"
+			storeFile file("app-debug.jks")
+		}
+	}
+	
+	buildTypes {
+		release {
+			shrinkResources false
+			minifyEnabled false
+			proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+		}
+	}
+	
+	buildFeatures{
+		
+	}
+}
+
+dependencies {
+	implementation fileTree(dir: 'libs', include: ['*.jar'])
+	implementation 'com.hierynomus:sshj:0.38.0'
+	implementation 'com.google.android.material:material:1.12.0'
+	implementation 'androidx.annotation:annotation:1.8.0'
+	implementation 'org.bouncycastle:bctls-jdk18on:1.78.1'
+	implementation 'org.bouncycastle:bcprov-jdk18on:1.78.1'
+	runtimeOnly fileTree(dir: 'runtime', include: ['*.jar'])
+	compileOnly fileTree(dir: 'provider', include: ['.jar'])
+}
