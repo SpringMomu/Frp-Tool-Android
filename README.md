@@ -2,6 +2,7 @@
 # FRP Manager for Android
 
 **一款让你在手机上轻松管理和监控服务器 `frpc` 服务的强大工具。**
+![1.png](https://img.picui.cn/free/2025/07/09/686e5b6f87c42.jpg)
 
 ---
 
@@ -10,6 +11,8 @@
 在服务器上部署和管理多个 [FRP (Fast Reverse Proxy)](https://github.com/fatedier/frp) 客户端 (`frpc`) 服务，通常需要通过 SSH 登录服务器，手动编辑配置文件、执行 `systemd` 命令，操作相对繁琐。
 
 `FRP Tool` 是一款原生的安卓应用，旨在彻底改变这一体验。它通过 SSH 连接到您的 Linux 服务器，提供了一个直观的图形化界面，让您可以随时随地完成 `frpc` 的环境部署、配置管理、状态监控和日志查看等一系列操作，极大地提升了管理效率。
+
+![2.png](https://img.picui.cn/free/2025/07/09/686e5b70840b7.jpg)
 
 ## 核心功能
 
@@ -35,6 +38,8 @@
     * **SSH 连接管理:** 保存和管理连接到服务器的 SSH 认证信息（主机、端口、密码）。
     * **FRP 通用配置:** 统一设置所有 `frpc` 服务需要连接的 `frps` 服务器地址、端口及 `token`。
     * **防火墙管理:**（可选）集成对 `firewalld` / `ufw` 的自动端口开放管理。
+
+![3.png](https://img.picui.cn/free/2025/07/09/686e5b708e8bd.jpg)
 
 ## 项目特点
 
