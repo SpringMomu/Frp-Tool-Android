@@ -3,7 +3,7 @@
 
 **一款让你在手机上轻松管理和监控服务器 `frpc` 服务的强大工具。**
 
-<img src="https://img.picui.cn/free/2025/07/09/686e5b70840b7.jpg" alt="1.jpg" width="40" />
+<img src="https://img.picui.cn/free/2025/07/09/686e5b70840b7.jpg" alt="1.jpg" width="40%" />
 
 ---
 
