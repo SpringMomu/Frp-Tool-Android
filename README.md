@@ -2,7 +2,8 @@
 # FRP Manager for Android
 
 **一款让你在手机上轻松管理和监控服务器 `frpc` 服务的强大工具。**
-![1.png](https://img.picui.cn/free/2025/07/09/686e5b6f87c42.jpg)
+
+<img src="https://img.picui.cn/free/2025/07/09/686e5b70840b7.jpg" alt="1.jpg" width="40" />
 
 ---
 
