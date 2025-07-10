@@ -72,7 +72,7 @@
             android:text="127.0.0.1"
             android:inputType="text" />
     </com.google.android.material.textfield.TextInputLayout>
-    
+
     <com.google.android.material.textfield.TextInputLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -85,8 +85,33 @@
             android:layout_height="wrap_content"
             android:text="批量创建-[P]"
             android:inputType="text" />
-            
+
     </com.google.android.material.textfield.TextInputLayout>
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="协议类型 (将应用于所有端口)"
+        android:textAppearance="?attr/textAppearanceLabelLarge"/>
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+        
+        <CheckBox
+            android:id="@+id/checkbox_tcp_batch"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="TCP"
+            android:checked="true"/>
+        <CheckBox
+            android:id="@+id/checkbox_udp_batch"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:text="UDP" />
+        </LinearLayout>
+
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

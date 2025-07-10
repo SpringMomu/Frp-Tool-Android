@@ -17,20 +17,16 @@ public class FrpProfile {
     private boolean isSelected = false;
     private boolean isModified = false;
     private String firewallStatus;
-    
     public FrpProfile() {
     }
-
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
-
     public String getServerAddr() { return serverAddr; }
     public void setServerAddr(String serverAddr) { this.serverAddr = serverAddr; }
     public int getServerPort() { return serverPort; }
     public void setServerPort(int serverPort) { this.serverPort = serverPort; }
     public String getToken() { return token; }
     public void setToken(String token) { this.token = token; }
-
     public int getRemotePort() { return remotePort; }
     public void setRemotePort(int remotePort) { this.remotePort = remotePort; }
     public String getLocalIp() { return localIp; }
@@ -43,7 +39,6 @@ public class FrpProfile {
     public void setTag(String tag) { this.tag = tag; }
     public String getProxyProtocolVersion() { return proxyProtocolVersion; }
     public void setProxyProtocolVersion(String version) { this.proxyProtocolVersion = version; }
-
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
     public boolean isSelected() { return isSelected; }
@@ -52,8 +47,6 @@ public class FrpProfile {
     public void setModified(boolean modified) { this.isModified = modified; }
     public String getFirewallStatus() { return firewallStatus; }
     public void setFirewallStatus(String firewallStatus) { this.firewallStatus = firewallStatus; }
-
-
     public boolean hasFunctionalChanges(FrpProfile other) {
         if (other == null) return true;
         return this.remotePort != other.remotePort ||
@@ -65,7 +58,6 @@ public class FrpProfile {
             !Objects.equals(this.protocol, other.protocol) ||
             !Objects.equals(this.proxyProtocolVersion, other.proxyProtocolVersion);
     }
-
     public void updateDataFrom(FrpProfile other) {
         this.setServerAddr(other.getServerAddr());
         this.setServerPort(other.getServerPort());
@@ -76,7 +68,6 @@ public class FrpProfile {
         this.setTag(other.getTag());
         this.setProxyProtocolVersion(other.getProxyProtocolVersion());
     }
-
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -84,7 +75,6 @@ public class FrpProfile {
         FrpProfile that = (FrpProfile) o;
         return Objects.equals(name, that.name);
     }
-
     @Override
     public int hashCode() {
         return Objects.hash(name);

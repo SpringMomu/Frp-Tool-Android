@@ -13,8 +13,6 @@ public class MyApplication extends Application {
     }
 
     private void setupBouncyCastle() {
-        // Ensure that the bundled Bouncy Castle Provider is used,
-        // prioritizing it over any potentially incomplete system-provided versions.
         Security.removeProvider("BC");
         Security.insertProviderAt(new BouncyCastleProvider(), 1);
     }

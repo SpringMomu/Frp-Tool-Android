@@ -44,17 +44,23 @@ public class ProgressFragment extends Fragment {
     private void startSetupProcess() {
         executor.execute(() -> {
             try {
+                // 1. 获取服务器架构
                 updateUi("正在检测服务器架构...", 5);
                 String arch = sshManager.executeCommand("uname -m", 10).trim();
-                String frpcAssetPath = arch.equals("aarch64") ? "frpc/aarch64/frpc" : "frpc/x86_64/frpc";
+                String frpcAssetPath;
+                if (arch.equals("aarch64")) {
+                    frpcAssetPath = "frpc/aarch64/frpc";
+                } else {
+                    frpcAssetPath = "frpc/x86_64/frpc";
+                }
                 updateUi("检测到架构: " + arch + ", 准备上传frpc...", 10);
-
                 File frpcFile = copyAssetToCache(frpcAssetPath, "frpc");
                 try (SFTPClient sftp = sshManager.getSftpClient()) {
                     sftp.put(frpcFile.getAbsolutePath(), "/root/frpc_temp_upload");
                 }
                 updateUi("frpc 上传成功, 准备执行配置脚本...", 20);
 
+                // 3. 读取并执行配置脚本
                 String setupScript = readAssetFileAsString("scripts/setup_env.sh");
                 try (SshManager.CommandStreamer streamer = sshManager.executeCommandAndStreamOutput(setupScript, 120)) {
                     BufferedReader reader = new BufferedReader(new InputStreamReader(streamer.getInputStream()));
@@ -68,6 +74,7 @@ public class ProgressFragment extends Fragment {
                             updateUi(status, progress);
                         } else if (finalLine.startsWith("FINAL_STATUS:SETUP_COMPLETE")) {
                             updateUi("配置完成！", 100);
+							// 等待一秒，然后跳转到最后一步
                             Thread.sleep(1000);
                             if (getActivity() instanceof SetupWizardActivity) {
                                 requireActivity().runOnUiThread(((SetupWizardActivity) getActivity())::navigateToNextStep);
@@ -92,6 +99,7 @@ public class ProgressFragment extends Fragment {
                 tvStatus.setText(message);
                 if (progress >= 0) {
                     progressBar.setProgress(progress);
+                } else {
                 }
             });
         }
@@ -101,7 +109,7 @@ public class ProgressFragment extends Fragment {
         AssetManager assetManager = requireContext().getAssets();
         File cacheFile = new File(requireContext().getCacheDir(), cacheFileName);
         try (InputStream in = assetManager.open(assetPath);
-             FileOutputStream out = new FileOutputStream(cacheFile)) {
+		FileOutputStream out = new FileOutputStream(cacheFile)) {
             byte[] buffer = new byte[1024];
             int read;
             while ((read = in.read(buffer)) != -1) {
@@ -114,7 +122,7 @@ public class ProgressFragment extends Fragment {
     private String readAssetFileAsString(String fileName) throws IOException {
         StringBuilder sb = new StringBuilder();
         try (InputStream is = requireContext().getAssets().open(fileName);
-             BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
+		BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 sb.append(line).append(System.lineSeparator());

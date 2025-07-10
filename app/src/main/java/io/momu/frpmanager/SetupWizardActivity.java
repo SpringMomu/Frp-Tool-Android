@@ -7,6 +7,7 @@ import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
 import androidx.viewpager2.adapter.FragmentStateAdapter;
 import androidx.viewpager2.widget.ViewPager2;
+import android.annotation.SuppressLint;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
 
@@ -24,10 +25,8 @@ public class SetupWizardActivity extends AppCompatActivity {
         pagerAdapter = new WizardPagerAdapter(this);
         viewPager.setAdapter(pagerAdapter);
         viewPager.setUserInputEnabled(false);
-
         TabLayout tabLayout = findViewById(R.id.tab_layout_wizard);
         new TabLayoutMediator(tabLayout, viewPager, (tab, position) -> {
-            // Do nothing, we just want the dots
         }).attach();
     }
 
@@ -37,11 +36,10 @@ public class SetupWizardActivity extends AppCompatActivity {
             viewPager.setCurrentItem(currentItem + 1);
         }
     }
-
+    
+    @SuppressLint("MissingSuperCall")
     @Override
     public void onBackPressed() {
-        // Disable back press during the wizard.
-        // super.onBackPressed(); 
     }
 
     private static class WizardPagerAdapter extends FragmentStateAdapter {

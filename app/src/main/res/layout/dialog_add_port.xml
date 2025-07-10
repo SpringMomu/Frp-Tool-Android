@@ -117,16 +117,29 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:text="协议类型"
+            android:text="协议类型 (可多选)"
             android:textAppearance="?attr/textAppearanceLabelLarge"/>
-        <RadioGroup
-            android:id="@+id/radiogroup_protocol"
+
+        <LinearLayout
+            android:id="@+id/protocol_checkbox_group"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal">
-            <RadioButton android:id="@+id/radio_tcp" android:text="TCP" android:checked="true"/>
-            <RadioButton android:id="@+id/radio_udp" android:text="UDP" android:layout_marginStart="16dp"/>
-        </RadioGroup>
+
+            <CheckBox
+                android:id="@+id/checkbox_tcp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="TCP"
+                android:checked="true"/>
+
+            <CheckBox
+                android:id="@+id/checkbox_udp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:text="UDP" />
+            </LinearLayout>
 
         <com.google.android.material.materialswitch.MaterialSwitch
             android:id="@+id/switch_proxy_protocol"
