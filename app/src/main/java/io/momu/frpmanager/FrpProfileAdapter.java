@@ -43,7 +43,6 @@ public class FrpProfileAdapter extends RecyclerView.Adapter<FrpProfileAdapter.Pr
     @NonNull
     @Override
     public ProfileViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        // Ensure the correct layout file name is used.
         View view = LayoutInflater.from(context).inflate(R.layout.list_item_frp_profile, parent, false);
         return new ProfileViewHolder(view);
     }
@@ -51,7 +50,6 @@ public class FrpProfileAdapter extends RecyclerView.Adapter<FrpProfileAdapter.Pr
     @Override
     public void onBindViewHolder(@NonNull ProfileViewHolder holder, int position) {
         final FrpProfile profile = profiles.get(position);
-
         holder.tvRemotePort.setText(String.valueOf(profile.getRemotePort()));
         holder.tvProtocol.setText(profile.getProtocol() != null ? profile.getProtocol().toUpperCase() : "N/A");
         holder.tvMapping.setText("映射到 " + profile.getLocalIp() + ":" + profile.getLocalPort());
@@ -73,25 +71,15 @@ public class FrpProfileAdapter extends RecyclerView.Adapter<FrpProfileAdapter.Pr
         String statusText = profile.getStatus();
         int statusColor;
         switch (statusText != null ? statusText : "") {
-            case "运行中":
-                statusColor = ContextCompat.getColor(context, R.color.status_running);
-                break;
+            case "运行中": statusColor = ContextCompat.getColor(context, R.color.status_running); break;
             case "已停止":
-            case "启动失败":
-                statusColor = ContextCompat.getColor(context, R.color.status_stopped);
-                break;
-            case "已禁用":
-                statusColor = ContextCompat.getColor(context, R.color.status_disabled);
-                break;
+            case "启动失败": statusColor = ContextCompat.getColor(context, R.color.status_stopped); break;
+            case "已禁用": statusColor = ContextCompat.getColor(context, R.color.status_disabled); break;
             case "正在启动...":
             case "正在暂停...":
             case "正在重启...":
-            case "操作中...":
-                statusColor = ContextCompat.getColor(context, R.color.status_pending);
-                break;
-            default:
-                statusColor = ContextCompat.getColor(context, R.color.status_disabled);
-                break;
+            case "操作中...": statusColor = ContextCompat.getColor(context, R.color.status_pending); break;
+            default: statusColor = ContextCompat.getColor(context, R.color.status_disabled); break;
         }
 
         if (profile.isModified()) {
@@ -104,7 +92,6 @@ public class FrpProfileAdapter extends RecyclerView.Adapter<FrpProfileAdapter.Pr
         holder.tvStatus.setText(statusText);
         holder.tvStatus.setTextColor(statusColor);
 
-        // Bind firewall status.
         String firewallStatus = profile.getFirewallStatus();
         if (firewallStatus != null && !firewallStatus.isEmpty()) {
             holder.tvFirewallStatus.setVisibility(View.VISIBLE);
@@ -118,19 +105,40 @@ public class FrpProfileAdapter extends RecyclerView.Adapter<FrpProfileAdapter.Pr
             holder.tvFirewallStatus.setVisibility(View.GONE);
         }
 
-        holder.itemView.setOnClickListener(v -> listener.onProfileClick(profile));
+        holder.itemView.setOnClickListener(v -> {
+            int currentPosition = holder.getAdapterPosition();
+            if (currentPosition == RecyclerView.NO_POSITION) return;
+            FrpProfile clickedProfile = profiles.get(currentPosition);
+            if (isSelectionMode) {
+                clickedProfile.setSelected(!clickedProfile.isSelected());
+                notifyItemChanged(currentPosition);
+                listener.onSelectionChanged(getSelectedItemsCount());
+            } else {
+                listener.onProfileClick(clickedProfile);
+            }
+        });
+
         holder.itemView.setOnLongClickListener(v -> {
-            listener.onProfileLongClick(profile);
+            int currentPosition = holder.getAdapterPosition();
+            if (currentPosition == RecyclerView.NO_POSITION) return true;
+            FrpProfile longClickedProfile = profiles.get(currentPosition);
+            if (!isSelectionMode) {
+                listener.onProfileLongClick(longClickedProfile);
+            }
+            if (!longClickedProfile.isSelected()) {
+                longClickedProfile.setSelected(true);
+                notifyItemChanged(currentPosition);
+                listener.onSelectionChanged(getSelectedItemsCount());
+            }
             return true;
         });
 
         if (isSelectionMode) {
             holder.checkBox.setVisibility(View.VISIBLE);
             holder.checkBox.setChecked(profile.isSelected());
-            holder.checkBox.setOnClickListener(v -> listener.onProfileClick(profile));
         } else {
             holder.checkBox.setVisibility(View.GONE);
-            holder.checkBox.setOnClickListener(null);
+            holder.checkBox.setChecked(false);
         }
     }
 
@@ -139,6 +147,10 @@ public class FrpProfileAdapter extends RecyclerView.Adapter<FrpProfileAdapter.Pr
         return profiles.size();
     }
 
+    /**
+     * Updates the adapter's data using DiffUtil for efficient UI updates.
+     * @param newProfiles The new list of FrpProfile objects.
+     */
     public void updateData(List<FrpProfile> newProfiles) {
         final FrpProfileDiffCallback diffCallback = new FrpProfileDiffCallback(this.profiles, newProfiles);
         final DiffUtil.DiffResult diffResult = DiffUtil.calculateDiff(diffCallback);
@@ -146,16 +158,6 @@ public class FrpProfileAdapter extends RecyclerView.Adapter<FrpProfileAdapter.Pr
         this.profiles.clear();
         this.profiles.addAll(newProfiles);
         diffResult.dispatchUpdatesTo(this);
-    }
-
-    public void updateSingleItem(FrpProfile profile) {
-        for (int i = 0; i < profiles.size(); i++) {
-            if (profiles.get(i).equals(profile)) {
-                profiles.set(i, profile);
-                notifyItemChanged(i);
-                return;
-            }
-        }
     }
 
     public void enterSelectionMode() {
@@ -166,9 +168,6 @@ public class FrpProfileAdapter extends RecyclerView.Adapter<FrpProfileAdapter.Pr
         }
     }
 
-    /**
-     * Exits selection mode and clears all selections.
-     */
     public void exitSelectionMode() {
         if (isSelectionMode) {
             isSelectionMode = false;
@@ -178,25 +177,14 @@ public class FrpProfileAdapter extends RecyclerView.Adapter<FrpProfileAdapter.Pr
         }
     }
 
-    public void clearSelection() {
+    private void clearSelection() {
         for (FrpProfile profile : profiles) {
             profile.setSelected(false);
         }
     }
 
-    public void toggleSelection(FrpProfile profile) {
-        profile.setSelected(!profile.isSelected());
-        int position = profiles.indexOf(profile);
-        if (position != -1) {
-            notifyItemChanged(position);
-            listener.onSelectionChanged(getSelectedItemsCount());
-        }
-    }
-
     public List<FrpProfile> getSelectedItems() {
-        return profiles.stream()
-            .filter(FrpProfile::isSelected)
-            .collect(Collectors.toList());
+        return profiles.stream().filter(FrpProfile::isSelected).collect(Collectors.toList());
     }
 
     public int getSelectedItemsCount() {
@@ -207,19 +195,16 @@ public class FrpProfileAdapter extends RecyclerView.Adapter<FrpProfileAdapter.Pr
         if (!isSelectionMode) return;
         profiles.forEach(profile -> profile.setSelected(true));
         notifyDataSetChanged();
+        listener.onSelectionChanged(profiles.size());
     }
 
     public void invertSelection() {
         if (!isSelectionMode) return;
         profiles.forEach(profile -> profile.setSelected(!profile.isSelected()));
         notifyDataSetChanged();
+        listener.onSelectionChanged(getSelectedItemsCount());
     }
 
-    /**
-     * Retrieves the selection state of all profiles in the adapter.
-     * Used to preserve selection across data refreshes.
-     * @return A Map where the key is the remote port and the value is its selection status.
-     */
     public Map<Integer, Boolean> getSelectionState() {
         Map<Integer, Boolean> selectionState = new HashMap<>();
         for (FrpProfile profile : profiles) {
@@ -245,6 +230,10 @@ public class FrpProfileAdapter extends RecyclerView.Adapter<FrpProfileAdapter.Pr
         }
     }
 
+    /**
+     * DiffUtil.Callback implementation for calculating differences between two lists of FrpProfile objects.
+     * This helps RecyclerView efficiently update only changed, added, or removed items.
+     */
     private static class FrpProfileDiffCallback extends DiffUtil.Callback {
         private final List<FrpProfile> oldList;
         private final List<FrpProfile> newList;
@@ -266,25 +255,24 @@ public class FrpProfileAdapter extends RecyclerView.Adapter<FrpProfileAdapter.Pr
 
         @Override
         public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
+            // Compare items based on a unique identifier (remotePort)
             return oldList.get(oldItemPosition).getRemotePort() == newList.get(newItemPosition).getRemotePort();
         }
 
         @Override
         public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
+            // Explicitly compare all fields that affect the item's visual representation
             FrpProfile oldProfile = oldList.get(oldItemPosition);
             FrpProfile newProfile = newList.get(newItemPosition);
 
-            // Compare all fields that affect UI display and logic.
-            return oldProfile.getRemotePort() == newProfile.getRemotePort() &&
-                Objects.equals(oldProfile.getLocalIp(), newProfile.getLocalIp()) &&
-                oldProfile.getLocalPort() == newProfile.getLocalPort() &&
-                Objects.equals(oldProfile.getProtocol(), newProfile.getProtocol()) &&
-                Objects.equals(oldProfile.getTag(), newProfile.getTag()) &&
-                Objects.equals(oldProfile.getStatus(), newProfile.getStatus()) &&
-                Objects.equals(oldProfile.getProxyProtocolVersion(), newProfile.getProxyProtocolVersion()) &&
-                oldProfile.isModified() == newProfile.isModified() &&
-                oldProfile.isSelected() == newProfile.isSelected() &&
-                Objects.equals(oldProfile.getFirewallStatus(), newProfile.getFirewallStatus());
+            return oldProfile.getLocalPort() == newProfile.getLocalPort() &&
+                    Objects.equals(oldProfile.getLocalIp(), newProfile.getLocalIp()) &&
+                    Objects.equals(oldProfile.getProtocol(), newProfile.getProtocol()) &&
+                    Objects.equals(oldProfile.getStatus(), newProfile.getStatus()) &&
+                    Objects.equals(oldProfile.getTag(), newProfile.getTag()) &&
+                    Objects.equals(oldProfile.getFirewallStatus(), newProfile.getFirewallStatus()) &&
+                    oldProfile.isModified() == newProfile.isModified() &&
+                    oldProfile.isSelected() == newProfile.isSelected();
         }
     }
 }

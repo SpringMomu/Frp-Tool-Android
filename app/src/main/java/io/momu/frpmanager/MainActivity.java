@@ -1,3 +1,5 @@
+// MainActivity.java
+
 package io.momu.frpmanager;
 
 import android.content.*;
@@ -75,7 +77,7 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
         if (!settingsManager.isConfigured()) {
             showSshSettingsDialog();
-            showErrorUI("请先配置SSH连接");
+            showErrorUI("请先配置SSH连接。");
         } else {
             checkEnvironmentAndProceed();
         }
@@ -104,6 +106,26 @@ public class MainActivity extends AppCompatActivity {
             });
         }
         executor.shutdown();
+    }
+
+    private boolean isOsSupported(String osRelease) {
+        if (osRelease == null || osRelease.isEmpty()) {
+            return false;
+        }
+
+        final Set<String> supportedIds = new HashSet<>(Arrays.asList("ubuntu", "debian", "centos"));
+
+        String[] lines = osRelease.split("\n");
+        for (String line : lines) {
+            if (line.trim().startsWith("ID=")) {
+                String value = line.substring(line.indexOf("=") + 1).trim();
+                if (value.startsWith("\"") && value.endsWith("\"")) {
+                    value = value.substring(1, value.length() - 1);
+                }
+                return supportedIds.contains(value);
+            }
+        }
+        return false;
     }
 
     private void initViews() {
@@ -135,12 +157,11 @@ public class MainActivity extends AppCompatActivity {
         btnViewLogs = findViewById(R.id.btn_view_logs);
         btnSettings = findViewById(R.id.btn_settings);
         btnDebugClear = findViewById(R.id.btn_debug_clear);
-
         btnFrpSettings = findViewById(R.id.btn_frp_settings);
 
-        tvStatTotalLabel.setText("端口总数");
+        tvStatTotalLabel.setText("总端口");
         tvStatRunningLabel.setText("运行中");
-        tvStatPendingLabel.setText("待应用");
+        tvStatPendingLabel.setText("待处理");
         tvStatErrorLabel.setText("错误");
 
         btnEnterFrpManager.setOnClickListener(v -> {
@@ -158,30 +179,29 @@ public class MainActivity extends AppCompatActivity {
 
         btnDebugClear.setOnClickListener(v -> {
             if (!settingsManager.isConfigured()) {
-                Toast.makeText(this, "请先配置SSH", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "请先配置SSH。", Toast.LENGTH_SHORT).show();
                 return;
             }
             new MaterialAlertDialogBuilder(this)
                 .setTitle("确认操作")
-                .setMessage("此操作将尝试删除服务器上由本软件创建的所有相关配置和文件，用于重置测试环境。确定要继续吗？")
+                .setMessage("此操作将尝试删除本软件在服务器上创建的所有相关配置和文件，用于重置测试环境。确定要继续吗？")
                 .setNegativeButton("取消", null)
-                .setPositiveButton("确定清除", (dialog, which) -> executeCleanup())
+                .setPositiveButton("清除", (dialog, which) -> executeCleanup())
                 .show();
         });
 
         btnFrpSettings.setOnClickListener(v -> {
             if (!settingsManager.isConfigured()) {
-                Toast.makeText(this, "请先配置SSH", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "请先配置SSH。", Toast.LENGTH_SHORT).show();
                 return;
             }
             showFrpCommonSettingsDialog();
         });
 
-
-        statTotalLayout.setOnClickListener(v -> showPortsDialog("total", "端口总数列表", totalPortList));
+        statTotalLayout.setOnClickListener(v -> showPortsDialog("total", "所有端口列表", totalPortList));
         statRunningLayout.setOnClickListener(v -> showPortsDialog("running", "运行中端口列表", runningPortList));
         statErrorLayout.setOnClickListener(v -> showPortsDialog("error", "错误端口列表", errorPortList));
-        statPendingLayout.setOnClickListener(v -> showPortsDialog("pending", "待应用更改列表", pendingPortList));
+        statPendingLayout.setOnClickListener(v -> showPortsDialog("pending", "待处理更改列表", pendingPortList));
     }
 
     private void showSshSettingsDialog() {
@@ -202,17 +222,17 @@ public class MainActivity extends AppCompatActivity {
         etUsername.setText("root");
         etUsername.setEnabled(false);
         etUsername.setFocusable(false);
-        passwordLayout.setHelperText("注意：必须使用 root 用户。如果密码登录失败，请检查服务器 /etc/ssh/sshd_config 文件中是否已设置 'PermitRootLogin yes'。");
+        passwordLayout.setHelperText("注意：必须使用root用户。如果密码登录失败，请检查服务器上的 /etc/ssh/sshd_config 中是否设置了 'PermitRootLogin yes'。");
 
         if (settingsManager.isConfigured()) {
             etHost.setText(settingsManager.getHost());
             etPort.setText(String.valueOf(settingsManager.getPort()));
             etPassword.setText(settingsManager.getPassword());
             cbManageFirewall.setChecked(settingsManager.isFirewallManaged());
-            tvStatus.setText("已保存的连接信息");
+            tvStatus.setText("已保存连接信息");
             tvStatus.setTextColor(Color.GRAY);
         } else {
-            tvStatus.setText("请填写 root 用户密码以开始使用");
+            tvStatus.setText("请输入root用户密码开始");
             tvStatus.setTextColor(Color.RED);
         }
 
@@ -236,7 +256,7 @@ public class MainActivity extends AppCompatActivity {
                 String pass = etPassword.getText().toString().trim();
 
                 if (host.isEmpty() || portStr.isEmpty() || user.isEmpty()) {
-                    tvStatus.setText("主机、端口和用户名不能为空");
+                    tvStatus.setText("主机、端口和用户名不能为空。");
                     tvStatus.setTextColor(Color.RED);
                     return;
                 }
@@ -253,7 +273,7 @@ public class MainActivity extends AppCompatActivity {
                         String firewallType = "none";
                         if (manageFirewall) {
                             runOnUiThread(() -> {
-                                tvStatus.setText("连接成功! 正在检测防火墙...");
+                                tvStatus.setText("连接成功！正在检测防火墙...");
                                 tvStatus.setTextColor(Color.BLUE);
                             });
                             String detectCommand = "if systemctl is-active --quiet firewalld; then echo \"firewalld\"; " +
@@ -265,10 +285,10 @@ public class MainActivity extends AppCompatActivity {
 
                         final String finalFirewallType = firewallType;
                         runOnUiThread(() -> {
-                            String statusMessage = "连接成功!";
+                            String statusMessage = "连接成功！";
                             if (manageFirewall) {
                                 if (!"none".equals(finalFirewallType)) {
-                                    statusMessage += " 检测到防火墙: " + finalFirewallType;
+                                    statusMessage += " 检测到防火墙：" + finalFirewallType;
                                 } else {
                                     statusMessage += " 未检测到支持的防火墙 (firewalld/ufw/iptables)";
                                 }
@@ -278,7 +298,7 @@ public class MainActivity extends AppCompatActivity {
                         });
                     } catch (Exception e) {
                         runOnUiThread(() -> {
-                            tvStatus.setText("测试失败: " + e.getMessage());
+                            tvStatus.setText("测试失败：" + e.getMessage());
                             tvStatus.setTextColor(Color.RED);
                         });
                     }
@@ -292,7 +312,7 @@ public class MainActivity extends AppCompatActivity {
                 String pass = etPassword.getText().toString().trim();
 
                 if (host.isEmpty() || portStr.isEmpty() || user.isEmpty()) {
-                    tvStatus.setText("主机、端口和用户名不能为空");
+                    tvStatus.setText("主机、端口和用户名不能为空。");
                     tvStatus.setTextColor(Color.RED);
                     return;
                 }
@@ -328,7 +348,8 @@ public class MainActivity extends AppCompatActivity {
         executor.execute(() -> {
             try {
                 String osRelease = sshManager.executeCommand("cat /etc/os-release", 10);
-                if (!(osRelease.contains("ID=ubuntu") || osRelease.contains("ID=debian") || osRelease.contains("ID=centos"))) {
+
+                if (!isOsSupported(osRelease)) {
                     runOnUiThread(() -> showUnsupportedSystemDialog(osRelease));
                     return;
                 }
@@ -340,7 +361,7 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 String scriptContent = readAssetFile("scripts/check_env.sh");
-                if (scriptContent == null) throw new IOException("无法读取 check_env.sh 脚本");
+                if (scriptContent == null) throw new IOException("无法读取 check_env.sh 脚本。");
 
                 String scriptOutput = sshManager.executeCommand(scriptContent, 15).trim();
                 runOnUiThread(() -> {
@@ -353,27 +374,27 @@ public class MainActivity extends AppCompatActivity {
                     } else if (scriptOutput.contains("STATUS:NEEDS_SETUP")) {
                         new MaterialAlertDialogBuilder(this)
                             .setTitle("环境未配置")
-                            .setMessage("检测到服务器缺少必要的组件，是否现在开始自动配置？\n\n" + scriptOutput)
-                            .setNegativeButton("以后再说", null)
+                            .setMessage("服务器检测到缺少必要组件。您要立即开始自动配置吗？\n\n" + scriptOutput)
+                            .setNegativeButton("稍后", null)
                             .setPositiveButton("开始配置", (d, w) -> showSetupWizardDialog())
                             .show();
                     } else {
-                        showErrorUI("环境检查失败");
+                        showErrorUI("环境检查失败。");
                         new MaterialAlertDialogBuilder(this)
                             .setTitle("未知错误")
-                            .setMessage("无法识别服务器环境，请检查脚本或连接。\n\n--- 检查日志 ---\n" + scriptOutput)
-                            .setPositiveButton("好的", null).show();
+                            .setMessage("无法识别服务器环境。请检查脚本或连接。\n\n--- 检查日志 ---\n" + scriptOutput)
+                            .setPositiveButton("确定", null).show();
                     }
                 });
 
             } catch (IOException e) {
                 runOnUiThread(() -> {
                     if (loadingDialog != null && loadingDialog.isShowing()) loadingDialog.dismiss();
-                    showErrorUI("连接或脚本执行失败");
+                    showErrorUI("连接或脚本执行失败。");
                     new MaterialAlertDialogBuilder(this)
                         .setTitle("验证失败")
-                        .setMessage("无法完成服务器验证流程。\n错误详情: " + e.getMessage())
-                        .setPositiveButton("好的", null).show();
+                        .setMessage("未能完成服务器验证过程。\n错误详情：" + e.getMessage())
+                        .setPositiveButton("确定", null).show();
                 });
             }
         });
@@ -382,8 +403,8 @@ public class MainActivity extends AppCompatActivity {
     private void showUnsupportedSystemDialog(String osInfo) {
         if (loadingDialog != null && loadingDialog.isShowing()) loadingDialog.dismiss();
         new MaterialAlertDialogBuilder(this)
-            .setTitle("操作系统不受支持")
-            .setMessage("本工具目前仅支持基于 systemd 的主流 Linux 发行版 (如 Ubuntu, Debian, CentOS 7+)。\n\n检测到您的系统为:\n" + osInfo + "\n\n请更换系统或手动配置后使用。")
+            .setTitle("不支持的操作系统")
+            .setMessage("此工具目前仅支持主流的基于 systemd 的 Linux 发行版（例如：Ubuntu、Debian、CentOS 7+）。\n\n您的系统检测为：\n" + osInfo + "\n\n请在使用前更改您的系统或手动配置。")
             .setCancelable(false)
             .setPositiveButton("返回SSH设置", (d, w) -> showSshSettingsDialog())
             .show();
@@ -392,8 +413,8 @@ public class MainActivity extends AppCompatActivity {
     private void showNonRootUserDialog() {
         if (loadingDialog != null && loadingDialog.isShowing()) loadingDialog.dismiss();
         new MaterialAlertDialogBuilder(this)
-            .setTitle("需要 Root 权限")
-            .setMessage("为了执行自动化配置和管理，本工具要求必须使用 'root' 用户进行 SSH 连接。\n\n请在下方的设置中使用 root 用户信息登录。")
+            .setTitle("需要Root权限")
+            .setMessage("为了自动配置和管理，此工具需要以 'root' 用户进行SSH连接。\n\n请在以下设置中以root用户凭据登录。")
             .setCancelable(false)
             .setPositiveButton("返回SSH设置", (d, w) -> showSshSettingsDialog())
             .show();
@@ -414,7 +435,6 @@ public class MainActivity extends AppCompatActivity {
         final Button btnBack = dialogView.findViewById(R.id.btn_setup_back);
         final Button btnNext = dialogView.findViewById(R.id.btn_setup_next);
 
-        // Crash guard: Ensure these buttons exist in the layout.
         if (btnCancel == null || btnBack == null || btnNext == null) {
             Toast.makeText(this, "布局文件错误，请检查 dialog_setup_wizard.xml", Toast.LENGTH_LONG).show();
             return;
@@ -479,7 +499,7 @@ public class MainActivity extends AppCompatActivity {
                 });
                 String arch = sshManager.executeCommand("uname -m", 10).trim();
                 String frpcAssetPath = arch.equals("aarch64") ? "frpc/aarch64/frpc" : "frpc/x86_64/frpc";
-                final String status1 = "检测到架构: " + arch + ", 准备部署frpc...";
+                final String status1 = "检测到架构：" + arch + "，准备部署frpc...";
                 runOnUiThread(() -> {
                     tvStatus.setText(status1);
                     progressBar.setProgress(10, true);
@@ -487,7 +507,7 @@ public class MainActivity extends AppCompatActivity {
 
                 File frpcFile = copyAssetToCache(frpcAssetPath, "frpc");
                 runOnUiThread(() -> {
-                    tvStatus.setText("正在部署 frpc, 请稍候...");
+                    tvStatus.setText("正在部署frpc，请稍候...");
                     progressBar.setIndeterminate(true);
                 });
                 try (SFTPClient sftp = sshManager.getSftpClient()) {
@@ -499,6 +519,7 @@ public class MainActivity extends AppCompatActivity {
                     tvStatus.setText("部署完成，准备执行配置脚本...");
                     progressBar.setProgress(UPLOAD_COMPLETE_PROGRESS, true);
                 });
+
                 String setupScript = readAssetFile("scripts/setup_env.sh");
                 try (SshManager.CommandStreamer streamer = sshManager.executeCommandAndStreamOutput(setupScript, 120)) {
                     BufferedReader reader = new BufferedReader(new InputStreamReader(streamer.getInputStream()));
@@ -506,7 +527,17 @@ public class MainActivity extends AppCompatActivity {
                     while ((line = reader.readLine()) != null) {
                         final String finalLine = line;
                         if (finalLine.startsWith("PROGRESS:")) {
-                            // Progress update logic.
+                            try {
+                                String[] parts = finalLine.split(":", 3);
+                                if (parts.length == 3) {
+                                    int progress = Integer.parseInt(parts[1]);
+                                    String message = parts[2];
+                                    runOnUiThread(() -> {
+                                        progressBar.setProgress(UPLOAD_COMPLETE_PROGRESS + (int) ((100 - UPLOAD_COMPLETE_PROGRESS) * progress / 100.0), true);
+                                        tvStatus.setText(message);
+                                    });
+                                }
+                            } catch (NumberFormatException ignored) { }
                         } else if (finalLine.startsWith("FINAL_STATUS:SETUP_COMPLETE")) {
                             runOnUiThread(() -> {
                                 viewAnimator.setDisplayedChild(viewAnimator.indexOfChild(pageCompletion));
@@ -516,7 +547,6 @@ public class MainActivity extends AppCompatActivity {
                                     checkMark.setAlpha(0f);
                                     checkMark.setScaleX(0.5f);
                                     checkMark.setScaleY(0.5f);
-
                                     checkMark.animate()
                                         .alpha(1f)
                                         .scaleX(1f)
@@ -532,7 +562,7 @@ public class MainActivity extends AppCompatActivity {
                             });
                             break;
                         } else if (finalLine.startsWith("ERROR:")) {
-                            throw new IOException("服务器脚本执行出错: " + finalLine);
+                            throw new IOException("服务器脚本执行错误：" + finalLine);
                         }
                     }
                 }
@@ -541,7 +571,7 @@ public class MainActivity extends AppCompatActivity {
                 runOnUiThread(() -> {
                     tvProgressTitle.setText("配置失败");
                     tvProgressTitle.setTextColor(Color.RED);
-                    tvStatus.setText("发生错误: " + e.getMessage());
+                    tvStatus.setText("发生错误：" + e.getMessage());
                     progressBar.setVisibility(View.GONE);
                     dialog.setCancelable(true);
                     Button btnCancel = dialogView.findViewById(R.id.btn_setup_cancel);
@@ -573,11 +603,11 @@ public class MainActivity extends AppCompatActivity {
                 String addr = etAddr.getText().toString().trim();
                 String portStr = etPort.getText().toString().trim();
                 if(addr.isEmpty() || portStr.isEmpty()){
-                    Toast.makeText(this, "地址和端口不能为空", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, "地址和端口不能为空。", Toast.LENGTH_SHORT).show();
                     return;
                 }
                 settingsManager.saveFrpCommonSettings(addr, Integer.parseInt(portStr), etToken.getText().toString().trim());
-                Toast.makeText(this, "通用配置已保存", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "通用配置已保存。", Toast.LENGTH_SHORT).show();
             })
             .show();
     }
@@ -614,9 +644,9 @@ public class MainActivity extends AppCompatActivity {
         copyButton.setEnabled(false);
         copyButton.setOnClickListener(v -> {
             ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-            ClipData clip = ClipData.newPlainText("Server Info Log", logBuilder.toString());
+            ClipData clip = ClipData.newPlainText("服务器信息日志", logBuilder.toString());
             clipboard.setPrimaryClip(clip);
-            Toast.makeText(MainActivity.this, "日志已复制到剪贴板", Toast.LENGTH_SHORT).show();
+            Toast.makeText(MainActivity.this, "日志已复制到剪贴板。", Toast.LENGTH_SHORT).show();
         });
 
         loadServerInfo(contentTextView, scrollView, logBuilder, copyButton);
@@ -638,8 +668,8 @@ public class MainActivity extends AppCompatActivity {
             if (!uptimeLine.isEmpty()) {
                 String uptime = uptimeLine.substring(uptimeLine.indexOf("up") + 3, uptimeLine.indexOf(",")).trim();
                 String load = uptimeLine.substring(uptimeLine.indexOf("load average:") + 13).trim();
-                summary.append("● 系统已运行: ").append(uptime).append("\n");
-                summary.append("● 系统负载 (1/5/15min): ").append(load).append("\n");
+                summary.append("● 系统运行时间: ").append(uptime).append("\n");
+                summary.append("● 系统负载 (1/5/15分钟): ").append(load).append("\n");
             }
         } catch (Exception e) { /* ignore */ }
 
@@ -658,7 +688,7 @@ public class MainActivity extends AppCompatActivity {
             }
         } catch (Exception e) { /* ignore */ }
 
-        summary.append("● 硬盘使用:\n");
+        summary.append("● 磁盘使用:\n");
         try {
             String[] lines = rawLog.split("\n");
             boolean foundDisks = false;
@@ -678,10 +708,10 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
             if (!foundDisks) {
-                summary.append("  - 未能获取到硬盘信息。\n");
+                summary.append("  - 无法获取磁盘信息。\n");
             }
         } catch (Exception e) {
-            summary.append("  - 解析硬盘信息时出错。\n");
+            summary.append("  - 解析磁盘信息时出错。\n");
         }
 
         summary.append("● 检测到防火墙: ").append("none".equals(firewallType) ? "无" : firewallType).append("\n");
@@ -701,11 +731,11 @@ public class MainActivity extends AppCompatActivity {
 
         executor.execute(() -> {
             try {
-                String command = "echo '--- 系统负载与运行时间 ---'; " +
+                String command = "echo '--- 系统负载和运行时间 ---'; " +
                     "uptime; " +
-                    "echo; echo '--- 内存使用情况 ---'; " +
+                    "echo; echo '--- 内存使用 ---'; " +
                     "free -h; " +
-                    "echo; echo '--- 硬盘使用情况 ---'; " +
+                    "echo; echo '--- 磁盘使用 ---'; " +
                     "df -h | grep -E '^/dev/|Filesystem'; " +
                     "echo; echo '---INTERNAL_IP---'; " +
                     "hostname -I | awk '{print $1}'; " +
@@ -718,8 +748,8 @@ public class MainActivity extends AppCompatActivity {
                 final String serverInfoRaw = sshManager.executeCommand(command, 45);
 
                 String serverInfoForDisplay = serverInfoRaw;
-                String internalIp = "获取失败";
-                String firewallType = "获取失败";
+                String internalIp = "无法获取";
+                String firewallType = "无法获取";
 
                 try {
                     String[] ipParts = serverInfoRaw.split("---INTERNAL_IP---");
@@ -734,7 +764,6 @@ public class MainActivity extends AppCompatActivity {
                         }
                     }
                 } catch (Exception e) {
-                    // Parsing failed, use raw data
                 }
 
                 final String finalServerInfoForDisplay = serverInfoForDisplay;
@@ -750,11 +779,10 @@ public class MainActivity extends AppCompatActivity {
 
                     try {
                         String versionName = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
-                        String toolInfo = "\n❖ FRP Manager - 版本: " + versionName + " ❖\n\n" +
+                        String toolInfo = "\n❖ FRP 管理器 - 版本: " + versionName + " ❖\n\n" +
                             "by - Momu\n";
                         appendLog(textView, scrollView, logBuilder, toolInfo, "info");
                     } catch (Exception e) {
-                        // Ignore
                     }
 
                     appendLog(textView, scrollView, logBuilder, summary, "success");
@@ -771,7 +799,7 @@ public class MainActivity extends AppCompatActivity {
                 runOnUiThread(() -> {
                     textView.setText("");
                     logBuilder.setLength(0);
-                    appendLog(textView, scrollView, logBuilder, "加载服务器信息失败:\n" + e.getMessage(), "error");
+                    appendLog(textView, scrollView, logBuilder, "加载服务器信息失败：\n" + e.getMessage(), "error");
                     copyButton.setEnabled(false);
                 });
             }
@@ -806,7 +834,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void refreshDashboardData() {
         if (!settingsManager.isConfigured()) {
-            showErrorUI("SSH未配置或环境不安全");
+            showErrorUI("SSH未配置或环境不安全。");
             return;
         }
 
@@ -822,13 +850,12 @@ public class MainActivity extends AppCompatActivity {
                 "echo " + SEPARATOR + ";" +
                 "systemctl list-unit-files 'frpc@*.service' --no-pager | grep 'enabled' | grep -oP 'frpc@\\K[0-9]+';";
 
-
             try {
                 String result = sshManager.executeCommand(command);
                 String[] sections = result.split(SEPARATOR);
 
                 if (sections.length < 5) {
-                    throw new IOException("从服务器返回的数据格式不完整");
+                    throw new IOException("服务器返回的数据格式不完整。");
                 }
 
                 final int cpuUsage = sections[0].trim().isEmpty() ? 0 : Integer.parseInt(sections[0].trim());
@@ -869,7 +896,7 @@ public class MainActivity extends AppCompatActivity {
                         loadingDialog.dismiss();
                         isFirstLoad = false;
                     }
-                    showErrorUI("错误: " + errorMessage);
+                    showErrorUI("错误：" + errorMessage);
                 });
                 refreshHandler.removeCallbacks(refreshRunnable);
                 e.printStackTrace();
@@ -908,7 +935,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void showPortsDialog(String type, String title, List<String> ports) {
         if (ports.isEmpty() && !"pending".equals(type)) {
-            Toast.makeText(this, "没有" + title, Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "没有" + title.toLowerCase(), Toast.LENGTH_SHORT).show();
             return;
         }
 
@@ -916,7 +943,7 @@ public class MainActivity extends AppCompatActivity {
         builder.setTitle(title);
 
         if (ports.isEmpty()) {
-            builder.setMessage("当前没有待应用的更改。");
+            builder.setMessage("当前没有待处理的更改。");
         } else {
             ListView listView = new ListView(this);
             ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, ports);
@@ -957,7 +984,7 @@ public class MainActivity extends AppCompatActivity {
         Button copyButton = dialogView.findViewById(R.id.btn_copy_log);
         if (copyButton != null) copyButton.setVisibility(View.GONE);
 
-        logTitle.setText("端口 " + port + " 日志 (实时刷新中)");
+        logTitle.setText("端口 " + port + " 日志 (实时刷新)");
         isLogViewerActive = true;
 
         AlertDialog logDialog = builder.create();
@@ -975,11 +1002,11 @@ public class MainActivity extends AppCompatActivity {
                 if (!isLogViewerActive) return;
 
                 executor.execute(() -> {
-                    String logCommand = String.format("echo '---SYSTEMD STATUS---' && " +
-                            "systemctl status frpc@%s.service --no-pager && " +
-                            "echo '\n---JOURNAL LOGS (last 20 lines)---' && " +
-                            "journalctl -u frpc@%s.service --no-pager -n 20",
-                            port, port);
+                    String logCommand = String.format("echo '---SYSTEMD 状态---' && " +
+                        "systemctl status frpc@%s.service --no-pager && " +
+                        "echo '\n--- JOURNAL 日志 (最近20行)---' && " +
+                        "journalctl -u frpc@%s.service --no-pager -n 20",
+                        port, port);
                     try {
                         String rawLogs = sshManager.executeCommand(logCommand);
                         SpannableString formattedLogs = formatLogsForDisplay(rawLogs);
@@ -989,7 +1016,7 @@ public class MainActivity extends AppCompatActivity {
                             scrollView.post(() -> scrollView.fullScroll(View.FOCUS_DOWN));
                         });
                     } catch (IOException e) {
-                        runOnUiThread(() -> logContent.setText("加载日志失败:\n" + e.getMessage()));
+                        runOnUiThread(() -> logContent.setText("加载日志失败：\n" + e.getMessage()));
                     }
                 });
 
@@ -1063,7 +1090,7 @@ public class MainActivity extends AppCompatActivity {
         executor.execute(() -> {
             try {
                 String scriptContent = readAssetFile("scripts/cleanup.sh");
-                if (scriptContent == null) throw new IOException("无法读取清理脚本");
+                if (scriptContent == null) throw new IOException("无法读取清理脚本。");
 
                 String result = sshManager.executeCommand(scriptContent, 60);
 
@@ -1071,14 +1098,14 @@ public class MainActivity extends AppCompatActivity {
                     dialog.dismiss();
                     new MaterialAlertDialogBuilder(this)
                         .setTitle("操作完成")
-                        .setMessage("清理脚本已执行完毕。\n\n服务器返回:\n" + result)
-                        .setPositiveButton("好的", null)
+                        .setMessage("清理脚本执行成功。\n\n服务器返回：\n" + result)
+                        .setPositiveButton("确定", null)
                         .show();
                 });
             } catch (IOException e) {
                 runOnUiThread(() -> {
                     dialog.dismiss();
-                    Toast.makeText(this, "清理失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                    Toast.makeText(this, "清理失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
                 });
             }
         });

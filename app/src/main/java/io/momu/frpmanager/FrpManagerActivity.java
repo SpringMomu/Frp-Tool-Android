@@ -22,6 +22,7 @@ import com.google.android.material.dialog.*;
 import com.google.android.material.floatingactionbutton.*;
 import com.google.android.material.materialswitch.*;
 import com.google.android.material.textfield.*;
+import io.momu.frpmanager.*;
 import java.io.*;
 import java.util.*;
 import java.util.concurrent.*;
@@ -381,9 +382,6 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 
 
 	private void setupRecyclerView() {
-		// FIX: For dark mode UI issues with pending cards, ensure your FrpProfileAdapter
-		// uses a color selector (e.g., `status_pending_background.xml`) that defines
-		// distinct colors for light and dark themes.
 		adapter = new FrpProfileAdapter(this);
 		recyclerView.setLayoutManager(new LinearLayoutManager(this));
 		recyclerView.setAdapter(adapter);
@@ -587,12 +585,6 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 
 	@Override
 	public void onProfileClick(FrpProfile profile) {
-		if (isInSelectionMode) {
-			adapter.toggleSelection(profile);
-			onSelectionChanged(adapter.getSelectedItemsCount());
-			return;
-		}
-
 		if (lockedPorts.contains(profile.getRemotePort())) {
 			Toast.makeText(this, "请等待当前操作完成...", Toast.LENGTH_SHORT).show();
 			return;
@@ -664,8 +656,6 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 	public void onProfileLongClick(FrpProfile profile) {
 		if (!isInSelectionMode) {
 			enterSelectionMode();
-			adapter.toggleSelection(profile);
-			onSelectionChanged(adapter.getSelectedItemsCount());
 		}
 	}
 
@@ -704,13 +694,13 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 
 
 	private void updateProfileStatusInUi(FrpProfile profile, String status) {
-		for (int i = 0; i < allProfiles.size(); i++) {
-			if (allProfiles.get(i).getRemotePort() == profile.getRemotePort()) {
-				allProfiles.get(i).setStatus(status);
-				adapter.updateSingleItem(allProfiles.get(i));
-				return;
+		for (FrpProfile p : allProfiles) {
+			if (p.getRemotePort() == profile.getRemotePort()) {
+				p.setStatus(status);
+				break;
 			}
 		}
+		applyFilters();
 	}
 
 	private void showErrorDialog(String title, String content) {
@@ -719,12 +709,12 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 
 	private void showAddOrEditDialog(final FrpProfile existingProfile) {
 		LayoutInflater inflater = LayoutInflater.from(this);
-		View dialogView = inflater.inflate(R.layout.dialog_add_port, null);
+		View dialogView = inflater.inflate(R.layout.dialog_add_port, null); 
 
 		final TextView dialogTitle = dialogView.findViewById(R.id.dialog_title);
-		final EditText serverAddrInput = dialogView.findViewById(R.id.edit_text_server_addr);
-		final EditText serverPortInput = dialogView.findViewById(R.id.edit_text_server_port);
-		final EditText tokenInput = dialogView.findViewById(R.id.edit_text_token);
+		final EditText serverAddrInput = dialogView.findViewById(R.id.edit_text_server_addr); 
+		final EditText serverPortInput = dialogView.findViewById(R.id.edit_text_server_port); 
+		final EditText tokenInput = dialogView.findViewById(R.id.edit_text_token); 
 		final EditText remotePortInput = dialogView.findViewById(R.id.edit_text_remote_port);
 		final TextInputLayout remotePortLayout = dialogView.findViewById(R.id.layout_remote_port);
 		final EditText localIpInput = dialogView.findViewById(R.id.edit_text_local_ip);
@@ -743,7 +733,6 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 
 		if (existingProfile != null) {
 			dialogTitle.setText("编辑端口映射");
-			// FIX: Populate with profile's specific values, not global defaults.
 			serverAddrInput.setText(existingProfile.getServerAddr());
 			serverPortInput.setText(existingProfile.getServerPort() > 0 ? String.valueOf(existingProfile.getServerPort()) : "");
 			tokenInput.setText(existingProfile.getToken());
@@ -804,7 +793,6 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 				Toast.makeText(FrpManagerActivity.this, "远程端口不能为空", Toast.LENGTH_SHORT).show();
 				return;
 			}
-
 			int remotePort;
 			try {
 				remotePort = Integer.parseInt(remotePortStr);
@@ -850,7 +838,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 				for (FrpProfile p : allProfiles) {
 					if (p.getRemotePort() == remotePort) {
 						Toast.makeText(FrpManagerActivity.this, "远程端口 " + remotePort + " 已存在，请选择其他端口",
-									 Toast.LENGTH_SHORT).show();
+									   Toast.LENGTH_SHORT).show();
 						return;
 					}
 				}
@@ -893,10 +881,9 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 			return false;
 		}
 		Pattern pattern = Pattern.compile("^([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\." + "([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\."
-										 + "([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\." + "([01]?\\d\\d?|2[0-4]\\d|25[0-5])$");
+										  + "([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\." + "([01]?\\d\\d?|2[0-4]\\d|25[0-5])$");
 		return pattern.matcher(ip).matches();
 	}
-
 	private boolean isValidDomain(String domain) {
 		if (domain == null || domain.isEmpty()){
 			return false;
@@ -913,13 +900,10 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 			.show();
 	}
 
-	// FIX: Prevents duplicate cards when adding/modifying profiles.
 	private void addProfileToPendingList(FrpProfile profileToAdd, boolean isNew) {
 		profileToAdd.setModified(true);
-
 		pendingChangesProfiles.removeIf(p -> p.getRemotePort() == profileToAdd.getRemotePort());
 		pendingChangesProfiles.add(profileToAdd);
-
 		int existingIndex = -1;
 		for (int i = 0; i < allProfiles.size(); i++) {
 			if (allProfiles.get(i).getRemotePort() == profileToAdd.getRemotePort()) {
@@ -939,13 +923,6 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 		updatePendingChangesMenu();
 	}
 
-
-	/**
-	 * Applies changes for a single profile to the server and shows a log dialog for feedback.
-	 *
-	 * @param profile The profile with modifications to apply.
-	 * @param restart Whether to restart the service after applying the changes.
-	 */
 	private void applySingleProfileChange(final FrpProfile profile, final boolean restart) {
 		LayoutInflater inflater = LayoutInflater.from(this);
 		View logView = inflater.inflate(R.layout.dialog_log_viewer, null);
@@ -998,6 +975,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 													"sudo rm -f /etc/frp/conf.d/port_%d.ini.disabled; "
 													+ "printf '%%s\\n' '%s' | sudo tee /etc/frp/conf.d/port_%d.ini > /dev/null",
 													port, fileContent, port));
+
 				if (restart) {
 					appendLog(logTextView, logScrollView, logBuilder, "正在添加服务重启命令...", "info");
 					commandBuilder.append(String.format("; sudo systemctl restart frpc@%d.service", port));
@@ -1043,12 +1021,9 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 		});
 	}
 
-
-	// Generates FRP client configuration file content based on profile.
 	private String buildFileContent(FrpProfile profile) {
 		StringBuilder commonBuilder = new StringBuilder();
 		commonBuilder.append("[common]\n");
-
 		String serverAddr = profile.getServerAddr() != null ? profile.getServerAddr() : settingsManager.getFrpServerAddr();
 		int serverPort = profile.getServerPort() > 0 ? profile.getServerPort() : settingsManager.getFrpServerPort();
 		String token = profile.getToken() != null ? profile.getToken() : settingsManager.getFrpToken();
@@ -1103,86 +1078,106 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 		final EditText tokenInput = dialogView.findViewById(R.id.edit_text_token);
 		final EditText remoteRangeInput = dialogView.findViewById(R.id.edit_text_remote_range);
 		final EditText localIpInput = dialogView.findViewById(R.id.edit_text_local_ip);
+		final EditText tagInput = dialogView.findViewById(R.id.edit_text_tag); 
 
 		serverAddrInput.setText(settingsManager.getFrpServerAddr());
 		serverPortInput.setText(String.valueOf(settingsManager.getFrpServerPort()));
 		tokenInput.setText(settingsManager.getFrpToken());
 
-		new MaterialAlertDialogBuilder(this).setView(dialogView).setTitle("批量创建端口")
+		new MaterialAlertDialogBuilder(this)
+			.setView(dialogView)
+			.setTitle("批量创建端口")
+			.setNegativeButton("取消", null)
 			.setPositiveButton("创建", (dialog, which) -> {
-			try {
-				String serverAddr = serverAddrInput.getText().toString().trim();
-				if (!isValidIpAddress(serverAddr) && !isValidDomain(serverAddr)) {
-					throw new IllegalArgumentException("FRP 服务器地址格式不正确。");
-				}
-				int serverPort;
-				try {
-					serverPort = Integer.parseInt(serverPortInput.getText().toString());
-					if (serverPort <= 0 || serverPort > 65535) throw new NumberFormatException();
-				} catch (NumberFormatException e) {
-					throw new IllegalArgumentException("FRP 服务器端口无效。");
-				}
-				String token = tokenInput.getText().toString().trim();
+            try {
+                String serverAddr = serverAddrInput.getText().toString().trim();
+                if (!isValidIpAddress(serverAddr) && !isValidDomain(serverAddr)) {
+                    throw new IllegalArgumentException("FRP 服务器地址格式不正确。");
+                }
 
-				String remoteRange = remoteRangeInput.getText().toString();
-				String localIp = localIpInput.getText().toString();
-				String[] parts = remoteRange.split("-");
-				if (parts.length != 2)
-					throw new IllegalArgumentException("范围格式错误，应为 '开始-结束'");
+                int serverPort;
+                try {
+                    serverPort = Integer.parseInt(serverPortInput.getText().toString());
+                    if (serverPort <= 0 || serverPort > 65535) throw new NumberFormatException();
+                } catch (NumberFormatException e) {
+                    throw new IllegalArgumentException("FRP 服务器端口无效。");
+                }
 
-				int remoteStart = Integer.parseInt(parts[0].trim());
-				int remoteEnd = Integer.parseInt(parts[1].trim());
+                String token = tokenInput.getText().toString().trim();
+                String remoteRange = remoteRangeInput.getText().toString();
+                String localIp = localIpInput.getText().toString();
+                final String tagTemplate = tagInput.getText().toString().trim(); 
 
-				if (remoteStart <= 0 || remoteEnd > 65535 || remoteStart > remoteEnd) {
-					throw new IllegalArgumentException("端口范围无效，必须在 1-65535 之间，且开始端口需小于等于结束端口。");
-				}
-				if (remoteEnd - remoteStart + 1 > 1001) {
-					throw new IllegalArgumentException("单次创建范围不能超过1001个端口。");
-				}
+                String[] parts = remoteRange.split("-");
+                if (parts.length != 2) {
+                    throw new IllegalArgumentException("范围格式错误，应为 '开始-结束'");
+                }
 
-				if (!isValidIpAddress(localIp)) {
-					throw new IllegalArgumentException("本地 IP 格式不正确。");
-				}
+                int remoteStart = Integer.parseInt(parts[0].trim());
+                int remoteEnd = Integer.parseInt(parts[1].trim());
 
-				List<FrpProfile> newProfiles = new ArrayList<>();
-				Set<Integer> existingPorts = allProfiles.stream().map(FrpProfile::getRemotePort)
+                if (remoteStart <= 0 || remoteEnd > 65535 || remoteStart > remoteEnd) {
+                    throw new IllegalArgumentException("端口范围无效，必须在 1-65535 之间，且开始端口需小于等于结束端口。");
+                }
+                if (remoteEnd - remoteStart + 1 > 1001) {
+                    throw new IllegalArgumentException("单次创建范围不能超过1001个端口。");
+                }
+
+                if (!isValidIpAddress(localIp)) {
+                    throw new IllegalArgumentException("本地 IP 格式不正确。");
+                }
+
+                List<FrpProfile> newProfiles = new ArrayList<>();
+                Set<Integer> existingPorts = allProfiles.stream()
+					.map(FrpProfile::getRemotePort)
 				.collect(Collectors.toSet());
 
-				for (int port = remoteStart; port <= remoteEnd; port++) {
-					if (!existingPorts.contains(port)) {
-						FrpProfile p = new FrpProfile();
-						p.setServerAddr(serverAddr);
-						p.setServerPort(serverPort);
-						if (!token.isEmpty()) p.setToken(token);
+                for (int port = remoteStart; port <= remoteEnd; port++) {
+                    if (!existingPorts.contains(port)) {
+                        FrpProfile p = new FrpProfile();
+                        p.setServerAddr(serverAddr);
+                        p.setServerPort(serverPort);
+                        if (!token.isEmpty()) p.setToken(token);
 
-						p.setRemotePort(port);
-						p.setLocalIp(localIp);
-						p.setLocalPort(port);
-						p.setProtocol("tcp");
-						p.setTag("批量创建");
-						p.setStatus("已停止 (待应用)");
-						p.setModified(true);
-						newProfiles.add(p);
-					}
-				}
 
-				if (newProfiles.isEmpty()) {
-					Toast.makeText(FrpManagerActivity.this, "指定范围内所有端口均已存在，无需创建。", Toast.LENGTH_SHORT).show();
-					return;
-				}
+                        p.setRemotePort(port);
+                        p.setLocalIp(localIp);
+                        p.setLocalPort(port); 
+                        p.setProtocol("tcp");
+                        if (tagTemplate.contains("[P]")) {
+                            p.setTag(tagTemplate.replace("[P]", String.valueOf(port)));
+                        } else if (!tagTemplate.isEmpty()) {
+                            p.setTag(tagTemplate);
+                        } else {
+							p.setTag("批量创建");
+                        }
 
-				for (FrpProfile p : newProfiles) {
-					addProfileToPendingList(p, true);
-				}
+                        p.setStatus("已停止 (待应用)");
+                        p.setModified(true);
+                        newProfiles.add(p);
+                    }
+                }
 
-				new MaterialAlertDialogBuilder(this).setTitle("创建成功")
-					.setMessage(newProfiles.size() + " 个新端口配置已暂存。请点击菜单中的 '应用更改' 以将它们写入服务器。")
-					.setPositiveButton("好的", null).show();
+                if (newProfiles.isEmpty()) {
+                    Toast.makeText(FrpManagerActivity.this, "指定范围内所有端口均已存在，无需创建。", Toast.LENGTH_SHORT).show();
+                    return;
+                }
 
-			} catch (Exception e) {
-				showErrorDialog("输入错误", e.getMessage());
-			}
-		}).setNegativeButton("取消", null).show();
+                for (FrpProfile p : newProfiles) {
+                    addProfileToPendingList(p, true); 
+                }
+                
+                new MaterialAlertDialogBuilder(this)
+                    .setTitle("创建成功")
+                    .setMessage(newProfiles.size() + " 个新端口配置已暂存。请点击菜单中的 '应用更改' 以将它们写入服务器。")
+                    .setPositiveButton("好的", null)
+                    .show();
+
+            } catch (Exception e) {
+                showErrorDialog("输入错误", e.getMessage());
+            }
+        })
+        .show();
 	}
 
 	private void showBatchOperationDialog(final String operationType) {
@@ -1233,7 +1228,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 				filter = p -> "运行中".equals(p.getStatus()) && !p.isModified();
 				break;
 			case "delete" :
-			case "firewall-allow":
+			case "firewall-allow": 
 			case "firewall-block":
 			default :
 				filter = p -> true;
@@ -1292,9 +1287,9 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 		}
 
 		ArrayAdapter<String> arrayAdapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1,
-															 targets.stream()
-															 .map(p -> "端口: " + p.getRemotePort()
-															 + (p.getTag() != null && !p.getTag().isEmpty() ? " (" + p.getTag() + ")" : ""))
+															   targets.stream()
+															   .map(p -> "端口: " + p.getRemotePort()
+															   + (p.getTag() != null && !p.getTag().isEmpty() ? " (" + p.getTag() + ")" : ""))
 			.collect(Collectors.toList()));
 
 		new MaterialAlertDialogBuilder(this).setTitle(title).setAdapter(arrayAdapter, null)
@@ -1303,7 +1298,6 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 		}).show();
 	}
 
-	// FIX: Added port conflict check for start/restart operations.
 	private void executeBatchOperationWithLogDialog(final String operationType, final List<FrpProfile> targets) {
 		LayoutInflater inflater = LayoutInflater.from(this);
 		View logView = inflater.inflate(R.layout.dialog_log_viewer, null);
@@ -1332,13 +1326,11 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 
 		executor.execute(() -> {
 			List<FrpProfile> finalTargets = new ArrayList<>(targets);
-
 			if ("start".equals(operationType) || "restart".equals(operationType)) {
 				appendLog(logTextView, logScrollView, logBuilder, "正在检查服务器端口占用情况...", "info");
 
 				StringBuilder checkPortCmdBuilder = new StringBuilder();
 				for (FrpProfile p : finalTargets) {
-					// Use ss command for more accurate port check across all interfaces.
 					String command = String.format(
 						Locale.US,
 						"if ss -tlpn | grep -qE '(\\*:|0\\.0\\.0\\.0:)%d' ; then echo 'IN_USE:%d'; else echo 'FREE:%d'; fi;",
@@ -1391,7 +1383,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 			boolean firewallActionTaken = false;
 
 			appendLog(logTextView, logScrollView, logBuilder,
-					 "开始执行 " + finalTargets.size() + " 个批量操作 [" + getOperationName(operationType) + "]...", "info");
+					  "开始执行 " + finalTargets.size() + " 个批量操作 [" + getOperationName(operationType) + "]...", "info");
 			appendLog(logTextView, logScrollView, logBuilder, "------------------------------------------", "info");
 
 			if (manageFirewall) {
@@ -1493,7 +1485,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 				appendLog(logTextView, logScrollView, logBuilder, "\n服务器返回信息:", "success");
 				appendLog(logTextView, logScrollView, logBuilder, result.isEmpty() ? "(无输出)" : result, "success");
 				appendLog(logTextView, logScrollView, logBuilder, "------------------------------------------",
-						 "success");
+						  "success");
 
 				if (operationType.equals("start") || operationType.equals("stop") || operationType.equals("restart")) {
 					appendLog(logTextView, logScrollView, logBuilder, "\n正在获取服务最新日志...", "info");
@@ -1501,17 +1493,17 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 					StringBuilder journalCmdBuilder = new StringBuilder("set -e; ");
 					for (FrpProfile p : finalTargets) {
 						journalCmdBuilder.append(String.format(Locale.US,
-															 "echo '---LOG_FOR_PORT_%d---'; journalctl -u frpc@%d.service --no-pager -n 10 || echo 'Failed to get logs for port %d.'; ",
-															 p.getRemotePort(), p.getRemotePort(), p.getRemotePort()));
+															   "echo '---LOG_FOR_PORT_%d---'; journalctl -u frpc@%d.service --no-pager -n 10 || echo 'Failed to get logs for port %d.'; ",
+															   p.getRemotePort(), p.getRemotePort(), p.getRemotePort()));
 					}
 					String journalResult = sshManager.executeCommand(journalCmdBuilder.toString(), 60);
 					appendLog(logTextView, logScrollView, logBuilder, journalResult, "info");
 					appendLog(logTextView, logScrollView, logBuilder, "------------------------------------------",
-							 "info");
+							  "info");
 				}
 
 				appendLog(logTextView, logScrollView, logBuilder, "\n" + getOperationName(operationType) + "命令已完成！",
-						 "success");
+						  "success");
 
 			} catch (IOException | InterruptedException e) {
 				appendLog(logTextView, logScrollView, logBuilder, "\n\n###### 操作失败! ######", "error");
@@ -1538,7 +1530,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 	}
 
 	private void appendLog(TextView textView, ScrollView scrollView, StringBuilder logBuilder, String message,
-						 String type) {
+						   String type) {
 		runOnUiThread(() -> {
 			String formattedMessage;
 			switch (type) {
@@ -1581,7 +1573,6 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 		}
 	}
 
-	// FIX: Added post-creation verification step to ensure files are written on server.
 	private void applyChangesOnServer(final List<FrpProfile> profilesToApply) {
 		LayoutInflater inflater = LayoutInflater.from(this);
 		View logView = inflater.inflate(R.layout.dialog_log_viewer, null);
@@ -1635,9 +1626,9 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 				}
 
 				String command = String.format(Locale.US,
-											 "sudo rm -f /etc/frp/conf.d/port_%d.ini.disabled; "
-											 + "printf '%%s\\n' '%s' | sudo tee /etc/frp/conf.d/port_%d.ini > /dev/null; ",
-											 profile.getRemotePort(), fileContent, profile.getRemotePort());
+											   "sudo rm -f /etc/frp/conf.d/port_%d.ini.disabled; "
+											   + "printf '%%s\\n' '%s' | sudo tee /etc/frp/conf.d/port_%d.ini > /dev/null; ",
+											   profile.getRemotePort(), fileContent, profile.getRemotePort());
 				commandBuilder.append(command);
 			}
 
@@ -1655,7 +1646,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 				appendLog(logTextView, logScrollView, logBuilder, "------------------------------------------", "info");
 
 				String result = "";
-				if (commandBuilder.length() > 5) {
+				if (commandBuilder.length() > 5) { 
 					appendLog(logTextView, logScrollView, logBuilder, "正在发送命令至服务器...", "info");
 					result = sshManager.executeCommand(finalCommand, 60);
 				}
@@ -1663,7 +1654,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 				appendLog(logTextView, logScrollView, logBuilder, "\n服务器返回信息:", "success");
 				appendLog(logTextView, logScrollView, logBuilder, result.isEmpty() ? "(无输出)" : result, "success");
 				appendLog(logTextView, logScrollView, logBuilder, "------------------------------------------",
-						 "success");
+						  "success");
 
 				appendLog(logTextView, logScrollView, logBuilder, "\n正在验证配置文件是否已创建...", "info");
 				StringBuilder verifyCmdBuilder = new StringBuilder();
@@ -1688,7 +1679,6 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 				} else {
 					appendLog(logTextView, logScrollView, logBuilder, "\n部分或全部配置应用失败！请检查以上日志。", "error");
 				}
-
 			} catch (IOException e) {
 				hasError = true;
 				appendLog(logTextView, logScrollView, logBuilder, "\n\n###### 应用更改失败! ######", "error");
@@ -1802,7 +1792,6 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 			} catch (IOException e) {
 				appendLog(logTextView, logScrollView, logBuilder, "\n\n###### 操作失败! ######", "error");
 				appendLog(logTextView, logScrollView, logBuilder, "错误详情: " + e.getMessage(), "error");
-				e.printStackTrace();
 			} finally {
 				runOnUiThread(() -> {
 					logDialog.setTitle("操作完成");
@@ -1849,11 +1838,11 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 		String positiveButtonText = "allow".equals(operationType) ? "全部放行" : "全部阻止";
 
 		ArrayAdapter<String> arrayAdapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1,
-															 targets.stream()
-															 .map(p -> String.format("端口: %d/%s%s",
-																					 p.getRemotePort(),
-																					 p.getProtocol(),
-																					 (p.getTag() != null && !p.getTag().isEmpty() ? " (" + p.getTag() + ")" : "")))
+															   targets.stream()
+															   .map(p -> String.format("端口: %d/%s%s",
+																					   p.getRemotePort(),
+																					   p.getProtocol(),
+																					   (p.getTag() != null && !p.getTag().isEmpty() ? " (" + p.getTag() + ")" : "")))
 			.collect(Collectors.toList()));
 
 		new MaterialAlertDialogBuilder(this).setTitle(title).setAdapter(arrayAdapter, null)
@@ -1888,7 +1877,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 		executor.execute(() -> {
 			StringBuilder commandBuilder = new StringBuilder("set -e; ");
 			appendLog(logTextView, logScrollView, logBuilder,
-					 "开始执行 " + targets.size() + " 个批量防火墙操作 [" + getOperationName(operationType) + "]...", "info");
+					  "开始执行 " + targets.size() + " 个批量防火墙操作 [" + getOperationName(operationType) + "]...", "info");
 			appendLog(logTextView, logScrollView, logBuilder, "防火墙类型: " + firewallManager.getType(), "info");
 			appendLog(logTextView, logScrollView, logBuilder, "------------------------------------------", "info");
 
@@ -1931,7 +1920,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 				runOnUiThread(() -> {
 					logDialog.setTitle("操作完成");
 					closeButton.setEnabled(true);
-					loadFrpProfilesFromServer();
+					loadFrpProfilesFromServer(); 
 					exitSelectionMode();
 				});
 			}
@@ -1946,7 +1935,6 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 
 	private void applyFilters() {
 		List<FrpProfile> filteredList = new ArrayList<>(allProfiles);
-
 		switch (currentStatusFilter) {
 			case "running":
 				filteredList.removeIf(p -> !"运行中".equals(p.getStatus()));
@@ -1955,7 +1943,6 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 				filteredList.removeIf(p -> "运行中".equals(p.getStatus()));
 				break;
 		}
-
 		switch (currentProtocolFilter) {
 			case "tcp":
 				filteredList.removeIf(p -> !"tcp".equalsIgnoreCase(p.getProtocol()));
@@ -1964,7 +1951,6 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 				filteredList.removeIf(p -> !"udp".equalsIgnoreCase(p.getProtocol()));
 				break;
 		}
-
 		switch (currentFirewallFilter) {
 			case "allowed":
 				filteredList.removeIf(p -> !"已放行".equals(p.getFirewallStatus()));
@@ -2033,7 +2019,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 		new MaterialAlertDialogBuilder(this).setTitle("应用以下 " + modifiedProfiles.size() + " 个更改？")
 			.setAdapter(arrayAdapter, null).setPositiveButton("应用", (dialog, which) -> {
 			String message = String.format("此操作将应用 %d 个配置更改到服务器。\n\n更改不会自动生效，您需要稍后手动启动或重启相关服务。\n\n您确定要继续吗？",
-										 modifiedProfiles.size());
+										   modifiedProfiles.size());
 			new MaterialAlertDialogBuilder(FrpManagerActivity.this).setTitle("确认应用更改").setMessage(message)
 				.setPositiveButton("确定应用", (d, w) -> applyChangesOnServer(modifiedProfiles))
 			.setNegativeButton("取消", null).show();
@@ -2068,7 +2054,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 			try {
 				String result = sshManager.executeCommand(command, 45);
 				final List<FrpProfile> profiles = parseAndProcessServerResult(result, selectionState,
-																			 FrpManagerActivity.this.allProfiles);
+																			  FrpManagerActivity.this.allProfiles);
 
 				allProfiles.clear();
 				allProfiles.addAll(profiles);
@@ -2131,7 +2117,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 			}
 
 			profile.setSelected(selectionState.getOrDefault(port, false));
-			profile.setModified(false);
+			profile.setModified(false); 
 
 			String portRule = String.format("%d/%s", profile.getRemotePort(), profile.getProtocol());
 			if (openFirewallPorts.contains(portRule)) {
@@ -2140,9 +2126,8 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 				profile.setFirewallStatus("未放行");
 			}
 		}
-
 		for (FrpProfile pending : pendingChangesProfiles) {
-			pending.setModified(true);
+			pending.setModified(true); 
 			masterProfileMap.put(pending.getRemotePort(), pending);
 		}
 
@@ -2205,7 +2190,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 					if (iptablesPortMatcher.find()) {
 						String port = iptablesPortMatcher.group(1);
 						Matcher iptablesProtocolMatcher = protocolPattern.matcher(line);
-						String protocol = "tcp";
+						String protocol = "tcp"; 
 						if (iptablesProtocolMatcher.find()) {
 							protocol = iptablesProtocolMatcher.group(1);
 						}
@@ -2311,18 +2296,18 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 		copyButton.setOnClickListener(v -> {
 			ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
 			ClipData clip = ClipData.newPlainText("FRP Config port_" + profile.getRemotePort(),
-												 contentTextView.getText());
+												  contentTextView.getText());
 			clipboard.setPrimaryClip(clip);
-			Toast.makeText(FrpManagerActivity.this, "日志已复制到剪贴板", Toast.LENGTH_SHORT).show();
+			Toast.makeText(FrpManagerActivity.this, "配置内容已复制到剪贴板", Toast.LENGTH_SHORT).show();
 		});
 
 		executor.execute(() -> {
 			try {
 				String command = String.format(Locale.US,
-											 "sudo cat /etc/frp/conf.d/port_%d.ini 2>/dev/null || "
-											 + "sudo cat /etc/frp/conf.d/port_%d.ini.disabled 2>/dev/null || "
-											 + "echo '错误：在服务器上未找到对应的配置文件。'",
-											 profile.getRemotePort(), profile.getRemotePort());
+											   "sudo cat /etc/frp/conf.d/port_%d.ini 2>/dev/null || "
+											   + "sudo cat /etc/frp/conf.d/port_%d.ini.disabled 2>/dev/null || "
+											   + "echo '错误：在服务器上未找到对应的配置文件。'",
+											   profile.getRemotePort(), profile.getRemotePort());
 
 				final String fileContent = sshManager.executeCommand(command, 15);
 
