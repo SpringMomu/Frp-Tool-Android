@@ -2131,6 +2131,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 			return;
 		}
 		final Map<String, Boolean> selectionState = adapter.getSelectionStateByProfileKey();
+		final List<FrpProfile> currentProfiles = new ArrayList<>(this.allProfiles);
 
 		executor.execute(() -> {
 			final String SEPARATOR = "---FRP_MANAGER_SEPARATOR---";
@@ -2158,20 +2159,18 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 			try {
 				String result = sshManager.executeCommand(command, 45);
 				Log.d(TAG, "========= RAW SERVER OUTPUT START =========\n" + result
-					 + "\n========= RAW SERVER OUTPUT END =========");
-
+					  + "\n========= RAW SERVER OUTPUT END =========");
 				final List<FrpProfile> profiles = parseAndProcessServerResult(result, selectionState,
-																			 FrpManagerActivity.this.allProfiles);
+																			  currentProfiles);
 				Log.d(TAG, "Parsing complete. Number of profiles loaded: " + profiles.size());
-
-				allProfiles.clear();
-				allProfiles.addAll(profiles);
-				Collections.sort(allProfiles,
-								 Comparator.comparingInt(FrpProfile::getRemotePort).thenComparing(FrpProfile::getProtocol));
-
 				runOnUiThread(() -> {
+					allProfiles.clear();
+					allProfiles.addAll(profiles);
+					Collections.sort(allProfiles,
+									 Comparator.comparingInt(FrpProfile::getRemotePort).thenComparing(FrpProfile::getProtocol));
+
 					Log.d(TAG, "Updating UI with " + allProfiles.size() + " profiles.");
-					applyFilters();
+					applyFilters(); 
 					hideLoadingDialog();
 					updatePendingChangesMenu();
 				});
