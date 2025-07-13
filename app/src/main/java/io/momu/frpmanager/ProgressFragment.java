@@ -44,7 +44,6 @@ public class ProgressFragment extends Fragment {
     private void startSetupProcess() {
         executor.execute(() -> {
             try {
-                // 1. 获取服务器架构
                 updateUi("正在检测服务器架构...", 5);
                 String arch = sshManager.executeCommand("uname -m", 10).trim();
                 String frpcAssetPath;
@@ -59,8 +58,6 @@ public class ProgressFragment extends Fragment {
                     sftp.put(frpcFile.getAbsolutePath(), "/root/frpc_temp_upload");
                 }
                 updateUi("frpc 上传成功, 准备执行配置脚本...", 20);
-
-                // 3. 读取并执行配置脚本
                 String setupScript = readAssetFileAsString("scripts/setup_env.sh");
                 try (SshManager.CommandStreamer streamer = sshManager.executeCommandAndStreamOutput(setupScript, 120)) {
                     BufferedReader reader = new BufferedReader(new InputStreamReader(streamer.getInputStream()));
@@ -74,7 +71,6 @@ public class ProgressFragment extends Fragment {
                             updateUi(status, progress);
                         } else if (finalLine.startsWith("FINAL_STATUS:SETUP_COMPLETE")) {
                             updateUi("配置完成！", 100);
-							// 等待一秒，然后跳转到最后一步
                             Thread.sleep(1000);
                             if (getActivity() instanceof SetupWizardActivity) {
                                 requireActivity().runOnUiThread(((SetupWizardActivity) getActivity())::navigateToNextStep);

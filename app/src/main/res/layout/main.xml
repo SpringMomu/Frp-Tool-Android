@@ -231,7 +231,6 @@
 						android:visibility="gone"
                         android:text="重置服务器环境 (Debug)"
                         android:textColor="?attr/colorError" />
-
                 </LinearLayout>
 
             </com.google.android.material.card.MaterialCardView>

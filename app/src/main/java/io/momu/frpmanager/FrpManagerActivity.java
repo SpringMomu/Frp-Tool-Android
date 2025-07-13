@@ -26,10 +26,10 @@ import io.momu.frpmanager.*;
 import java.io.*;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.*;
 import java.util.function.*;
 import java.util.regex.*;
 import java.util.stream.*;
+
 import android.content.ClipboardManager;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.widget.Toolbar;
@@ -87,9 +87,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 			return "";
 		return port + "/" + protocol.toLowerCase();
 	}
-
-	private final AtomicBoolean isOperationCancelled = new AtomicBoolean(false);
-
+	
 	private String currentSearchQuery = "";
 	private String currentStatusFilter = "all";
 	private String currentProtocolFilter = "all";
@@ -108,8 +106,22 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 
 		settingsManager = new SshSettingsManager(this);
 		if (settingsManager.isConfigured()) {
-			sshManager = new SshManager(settingsManager.getHost(), settingsManager.getPort(),
-										settingsManager.getUsername(), settingsManager.getPassword());
+			if (settingsManager.getUseKeyAuth()) {
+				sshManager = new SshManager(
+					settingsManager.getHost(),
+					settingsManager.getPort(),
+					settingsManager.getUsername(),
+					settingsManager.getPrivateKey(),
+					settingsManager.getPassphrase()
+				);
+			} else {
+				sshManager = new SshManager(
+					settingsManager.getHost(),
+					settingsManager.getPort(),
+					settingsManager.getUsername(),
+					settingsManager.getPassword()
+				);
+			}
 		} else {
 			Toast.makeText(this, "错误：SSH 未配置。请返回主页进行设置。", Toast.LENGTH_LONG).show();
 			finish();

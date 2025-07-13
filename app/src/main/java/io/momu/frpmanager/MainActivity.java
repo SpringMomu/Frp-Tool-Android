@@ -5,10 +5,12 @@ package io.momu.frpmanager;
 import android.content.*;
 import android.content.res.*;
 import android.graphics.*;
+import android.net.*;
 import android.os.*;
 import android.text.*;
 import android.text.method.*;
 import android.text.style.*;
+import android.util.*;
 import android.view.*;
 import android.view.animation.*;
 import android.widget.*;
@@ -23,8 +25,10 @@ import java.io.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.regex.*;
-import java.util.stream.*;
 import net.schmizz.sshj.sftp.*;
+import org.bouncycastle.jce.provider.*;
+import org.bouncycastle.openssl.*;
+import org.bouncycastle.openssl.jcajce.*;
 
 import android.content.ClipboardManager;
 import androidx.appcompat.widget.Toolbar;
@@ -58,6 +62,10 @@ public class MainActivity extends AppCompatActivity {
 	private Handler logRefreshHandler;
 	private Runnable logRefreshRunnable;
 	private boolean isLogViewerActive = false;
+	
+	private static final int PICK_KEY_FILE_REQUEST_CODE = 1001;
+    private String selectedKeyContent = null;
+    private String selectedKeyName = null;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -275,27 +283,61 @@ public class MainActivity extends AppCompatActivity {
 		final TextInputEditText etHost = dialogView.findViewById(R.id.et_ssh_host);
 		final TextInputEditText etPort = dialogView.findViewById(R.id.et_ssh_port);
 		final TextInputEditText etUsername = dialogView.findViewById(R.id.et_ssh_username);
-		final TextInputEditText etPassword = dialogView.findViewById(R.id.et_ssh_password);
 		final TextView tvStatus = dialogView.findViewById(R.id.tv_ssh_status);
 		final SwitchMaterial cbManageFirewall = dialogView.findViewById(R.id.switch_manage_firewall);
-		final TextInputLayout passwordLayout = dialogView.findViewById(R.id.layout_ssh_password);
+
+		final SwitchMaterial switchUseKeyAuth = dialogView.findViewById(R.id.switch_use_key_auth);
+		final TextInputLayout layoutPassword = dialogView.findViewById(R.id.layout_ssh_password);
+		final TextInputEditText etPassword = dialogView.findViewById(R.id.et_ssh_password);
+		final LinearLayout layoutKeyAuthGroup = dialogView.findViewById(R.id.layout_key_auth_group);
+		final Button btnSelectKey = dialogView.findViewById(R.id.btn_select_key);
+		final TextView tvKeyPath = dialogView.findViewById(R.id.tv_key_path);
+		final TextInputEditText etPassphrase = dialogView.findViewById(R.id.et_ssh_passphrase);
 
 		etUsername.setText("root");
 		etUsername.setEnabled(false);
 		etUsername.setFocusable(false);
-		passwordLayout.setHelperText("注意：必须使用 root 用户。如果密码登录失败，请检查服务器 /etc/ssh/sshd_config 文件中是否已设置 'PermitRootLogin yes'。");
+		layoutPassword.setHelperText("注意：必须使用 root 用户。如果密码登录失败，请检查服务器 /etc/ssh/sshd_config 文件中是否已设置 'PermitRootLogin yes'。");
 
 		if (settingsManager.isConfigured()) {
 			etHost.setText(settingsManager.getHost());
 			etPort.setText(String.valueOf(settingsManager.getPort()));
-			etPassword.setText(settingsManager.getPassword());
 			cbManageFirewall.setChecked(settingsManager.isFirewallManaged());
+
+			boolean useKey = settingsManager.getUseKeyAuth();
+			switchUseKeyAuth.setChecked(useKey);
+			if (useKey) {
+				layoutPassword.setVisibility(View.GONE);
+				layoutKeyAuthGroup.setVisibility(View.VISIBLE);
+				selectedKeyContent = settingsManager.getPrivateKey();
+				tvKeyPath.setText(selectedKeyContent != null ? "已选择密钥 (保留)" : "尚未选择文件");
+				etPassphrase.setText(settingsManager.getPassphrase());
+			} else {
+				layoutPassword.setVisibility(View.VISIBLE);
+				layoutKeyAuthGroup.setVisibility(View.GONE);
+				etPassword.setText(settingsManager.getPassword());
+			}
 			tvStatus.setText("已保存的连接信息");
-			tvStatus.setTextColor(Color.GRAY);
 		} else {
 			tvStatus.setText("请填写 root 用户密码以开始使用");
-			tvStatus.setTextColor(Color.RED);
 		}
+
+		switchUseKeyAuth.setOnCheckedChangeListener((buttonView, isChecked) -> {
+			layoutPassword.setVisibility(isChecked ? View.GONE : View.VISIBLE);
+			layoutKeyAuthGroup.setVisibility(isChecked ? View.VISIBLE : View.GONE);
+			if(isChecked){
+				tvStatus.setText("请选择私钥文件");
+			} else {
+				tvStatus.setText("请输入密码");
+			}
+		});
+
+		btnSelectKey.setOnClickListener(v -> {
+			Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+			intent.setType("*/*");
+			intent.addCategory(Intent.CATEGORY_OPENABLE);
+			startActivityForResult(Intent.createChooser(intent, "选择私钥文件"), PICK_KEY_FILE_REQUEST_CODE);
+		});
 
 		builder.setTitle("SSH 连接配置");
 		builder.setPositiveButton("保存并连接", null);
@@ -314,47 +356,33 @@ public class MainActivity extends AppCompatActivity {
 				String host = etHost.getText().toString().trim();
 				String portStr = etPort.getText().toString().trim();
 				String user = etUsername.getText().toString().trim();
-				String pass = etPassword.getText().toString().trim();
 
 				if (host.isEmpty() || portStr.isEmpty() || user.isEmpty()) {
 					tvStatus.setText("主机、端口和用户名不能为空");
-					tvStatus.setTextColor(Color.RED);
 					return;
 				}
 
 				tvStatus.setText("正在测试连接...");
-				tvStatus.setTextColor(Color.BLUE);
-				boolean manageFirewall = cbManageFirewall.isChecked();
 
+				SshManager testManager;
+				if (switchUseKeyAuth.isChecked()) {
+					String passphrase = etPassphrase.getText().toString();
+					if (selectedKeyContent == null || selectedKeyContent.isEmpty()) {
+						tvStatus.setText("请先选择私钥文件");
+						return;
+					}
+					testManager = new SshManager(host, Integer.parseInt(portStr), user, selectedKeyContent, passphrase);
+				} else {
+					String pass = etPassword.getText().toString().trim();
+					testManager = new SshManager(host, Integer.parseInt(portStr), user, pass);
+				}
+
+				boolean manageFirewall = cbManageFirewall.isChecked();
 				executor.execute(() -> {
 					try {
-						SshManager testManager = new SshManager(host, Integer.parseInt(portStr), user, pass);
 						testManager.executeCommand("echo 'SSH_TEST_SUCCESS'", 10);
-
-						String firewallType = "none";
-						if (manageFirewall) {
-							runOnUiThread(() -> {
-								tvStatus.setText("连接成功! 正在检测防火墙...");
-								tvStatus.setTextColor(Color.BLUE);
-							});
-							String detectCommand = "if systemctl is-active --quiet firewalld; then echo \"firewalld\"; " +
-								"elif command -v ufw >/dev/null && ufw status | grep -q \"Status: active\"; then echo \"ufw\"; " +
-								"elif command -v iptables >/dev/null; then echo \"iptables\"; " +
-								"else echo \"none\"; fi";
-							firewallType = testManager.executeCommand(detectCommand, 15).trim();
-						}
-
-						final String finalFirewallType = firewallType;
 						runOnUiThread(() -> {
-							String statusMessage = "连接成功!";
-							if (manageFirewall) {
-								if (!"none".equals(finalFirewallType)) {
-									statusMessage += " 检测到防火墙: " + finalFirewallType;
-								} else {
-									statusMessage += " 未检测到支持的防火墙 (firewalld/ufw/iptables)";
-								}
-							}
-							tvStatus.setText(statusMessage);
+							tvStatus.setText("连接成功!");
 							tvStatus.setTextColor(Color.parseColor("#4CAF50"));
 						});
 					} catch (Exception e) {
@@ -370,33 +398,31 @@ public class MainActivity extends AppCompatActivity {
 				String host = etHost.getText().toString().trim();
 				String portStr = etPort.getText().toString().trim();
 				String user = etUsername.getText().toString().trim();
-				String pass = etPassword.getText().toString().trim();
 
 				if (host.isEmpty() || portStr.isEmpty() || user.isEmpty()) {
 					tvStatus.setText("主机、端口和用户名不能为空");
-					tvStatus.setTextColor(Color.RED);
 					return;
 				}
 
 				boolean manageFirewall = cbManageFirewall.isChecked();
-				settingsManager.saveSshSettings(host, Integer.parseInt(portStr), user, pass);
 				settingsManager.setManageFirewall(manageFirewall);
+
+				if (switchUseKeyAuth.isChecked()) {
+					String passphrase = etPassphrase.getText().toString();
+					if (selectedKeyContent == null || selectedKeyContent.isEmpty()) {
+						tvStatus.setText("请先选择私钥文件再保存");
+						return;
+					}
+					settingsManager.saveKeyAuthSettings(host, Integer.parseInt(portStr), user, selectedKeyContent, passphrase);
+				} else {
+					String pass = etPassword.getText().toString().trim();
+					settingsManager.savePasswordAuthSettings(host, Integer.parseInt(portStr), user, pass);
+				}
 
 				initializeSshManager();
 
-				executor.execute(() -> {
-					try {
-						if (sshManager != null) {
-							sshManager.forceDisconnect();
-						}
-					} catch (IOException e) {
-						e.printStackTrace();
-					}
-				});
-
 				Toast.makeText(MainActivity.this, "配置已保存，正在检查服务器环境...", Toast.LENGTH_SHORT).show();
 				dialog.dismiss();
-
 				checkEnvironmentAndProceed();
 			});
 		});
@@ -631,6 +657,60 @@ public class MainActivity extends AppCompatActivity {
 				});
 			}
 		});
+	}
+	
+	@Override
+	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+		super.onActivityResult(requestCode, resultCode, data);
+		if (requestCode == PICK_KEY_FILE_REQUEST_CODE && resultCode == RESULT_OK && data != null) {
+			Uri uri = data.getData();
+			if (uri != null) {
+				try {
+					selectedKeyContent = readTextFromUri(uri);
+					selectedKeyName = getFileNameFromUri(uri);
+					AlertDialog dialog = (AlertDialog) new MaterialAlertDialogBuilder(this).create();
+					View dialogView = dialog.findViewById(R.id.tv_key_path); 
+					Toast.makeText(this, "已选择密钥: " + selectedKeyName, Toast.LENGTH_SHORT).show();
+
+				} catch (IOException e) {
+					Toast.makeText(this, "读取密钥文件失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
+				}
+			}
+		}
+	}
+
+	private String readTextFromUri(Uri uri) throws IOException {
+		StringBuilder stringBuilder = new StringBuilder();
+		try (InputStream inputStream = getContentResolver().openInputStream(uri);
+		BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
+			String line;
+			while ((line = reader.readLine()) != null) {
+				stringBuilder.append(line).append('\n');
+			}
+		}
+		return stringBuilder.toString();
+	}
+	
+	private String getFileNameFromUri(Uri uri) {
+		String result = null;
+		if (uri.getScheme().equals("content")) {
+			try (android.database.Cursor cursor = getContentResolver().query(uri, null, null, null, null)) {
+				if (cursor != null && cursor.moveToFirst()) {
+					int colIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME);
+					if (colIndex != -1) {
+						result = cursor.getString(colIndex);
+					}
+				}
+			}
+		}
+		if (result == null) {
+			result = uri.getPath();
+			int cut = result.lastIndexOf('/');
+			if (cut != -1) {
+				result = result.substring(cut + 1);
+			}
+		}
+		return result;
 	}
 
 	private void showFrpCommonSettingsDialog() {
@@ -1034,18 +1114,11 @@ public class MainActivity extends AppCompatActivity {
 		LayoutInflater inflater = this.getLayoutInflater();
 		View dialogView = inflater.inflate(R.layout.dialog_log_viewer, null);
 		builder.setView(dialogView);
-
-		//TextView logTitle = dialogView.findViewById(R.id.log_title);
 		ScrollView scrollView = dialogView.findViewById(R.id.log_scroll_view);
 		final TextView logContent = dialogView.findViewById(R.id.log_text_view);
-		//ProgressBar logProgress = dialogView.findViewById(R.id.log_progress);
-
 		Button copyButton = dialogView.findViewById(R.id.btn_copy_log);
 		if (copyButton != null) copyButton.setVisibility(View.GONE);
-
-		//logTitle.setText("端口 " + port + " 日志 (实时刷新中)");
 		isLogViewerActive = true;
-
 		AlertDialog logDialog = builder.create();
 		logDialog.setOnDismissListener(dialog -> {
 			isLogViewerActive = false;
@@ -1070,7 +1143,6 @@ public class MainActivity extends AppCompatActivity {
 						String rawLogs = sshManager.executeCommand(logCommand);
 						SpannableString formattedLogs = formatLogsForDisplay(rawLogs);
 						runOnUiThread(() -> {
-							//logProgress.setVisibility(View.GONE);
 							logContent.setText(formattedLogs);
 							scrollView.post(() -> scrollView.fullScroll(View.FOCUS_DOWN));
 						});
@@ -1129,13 +1201,31 @@ public class MainActivity extends AppCompatActivity {
 
 	private void initializeSshManager() {
 		if (settingsManager.isConfigured()) {
-			sshManager = new SshManager(
-				settingsManager.getHost(),
-				settingsManager.getPort(),
-				settingsManager.getUsername(),
-				settingsManager.getPassword()
-			);
+			if (settingsManager.getUseKeyAuth()) {
+				String key = settingsManager.getPrivateKey();
+				Log.d("SSH_DEBUG", "Initializing with KEY auth. Key is null? " + (key == null));
+				if (key != null) {
+					Log.d("SSH_DEBUG", "Key starts with: " + key.substring(0, Math.min(key.length(), 30)));
+				}
+
+				sshManager = new SshManager(
+					settingsManager.getHost(),
+					settingsManager.getPort(),
+					settingsManager.getUsername(),
+					key,
+					settingsManager.getPassphrase()
+				);
+			} else {
+				Log.d("SSH_DEBUG", "Initializing with PASSWORD auth.");
+				sshManager = new SshManager(
+					settingsManager.getHost(),
+					settingsManager.getPort(),
+					settingsManager.getUsername(),
+					settingsManager.getPassword()
+				);
+			}
 		} else {
+			Log.d("SSH_DEBUG", "Not configured. Initializing with null settings.");
 			sshManager = new SshManager(null, 0, null, null);
 		}
 	}

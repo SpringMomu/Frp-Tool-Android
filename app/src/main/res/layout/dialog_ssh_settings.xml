@@ -58,6 +58,13 @@
                 android:maxLines="1" />
         </com.google.android.material.textfield.TextInputLayout>
 
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/switch_use_key_auth"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="使用密钥登录" />
+
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/layout_ssh_password"
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
@@ -65,6 +72,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:hint="SSH 密码"
+            android:visibility="visible"
             app:passwordToggleEnabled="true"
             app:startIconDrawable="@drawable/outline_key_24">
 
@@ -76,11 +84,61 @@
                 android:maxLines="1" />
         </com.google.android.material.textfield.TextInputLayout>
 
+        <LinearLayout
+            android:id="@+id/layout_key_auth_group"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <Button
+                android:id="@+id/btn_select_key"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="选择私钥文件" />
+
+            <TextView
+                android:id="@+id/tv_key_path"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:padding="8dp"
+                android:text="尚未选择文件"
+                android:textAppearance="?attr/textAppearanceCaption" />
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/layout_ssh_passphrase"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:hint="密钥口令 (如果无口令可留空)"
+                app:passwordToggleEnabled="true"
+                app:startIconDrawable="@drawable/outline_key_24">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/et_ssh_passphrase"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="textPassword"
+                    android:maxLines="1" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+        </LinearLayout>
+
+        <com.google.android.material.divider.MaterialDivider
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="16dp" />
+
+
         <com.google.android.material.switchmaterial.SwitchMaterial
             android:id="@+id/switch_manage_firewall"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:checked="true"
             android:paddingStart="4dp"
             android:paddingEnd="4dp"
             android:text="自动管理防火墙 (推荐)"
