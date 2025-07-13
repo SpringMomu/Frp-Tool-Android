@@ -1,7 +1,6 @@
-// MainActivity.java
-
 package io.momu.frpmanager;
 
+import android.animation.*;
 import android.content.*;
 import android.content.res.*;
 import android.graphics.*;
@@ -17,6 +16,7 @@ import android.widget.*;
 import androidx.appcompat.app.*;
 import androidx.appcompat.widget.*;
 import com.google.android.material.button.*;
+import com.google.android.material.card.*;
 import com.google.android.material.dialog.*;
 import com.google.android.material.progressindicator.*;
 import com.google.android.material.switchmaterial.*;
@@ -26,9 +26,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.regex.*;
 import net.schmizz.sshj.sftp.*;
-import org.bouncycastle.jce.provider.*;
-import org.bouncycastle.openssl.*;
-import org.bouncycastle.openssl.jcajce.*;
+import org.json.*;
 
 import android.content.ClipboardManager;
 import androidx.appcompat.widget.Toolbar;
@@ -39,13 +37,23 @@ public class MainActivity extends AppCompatActivity {
 	private static final int REFRESH_INTERVAL_MS = 5000;
 
 	private Toolbar toolbar;
-	private LinearProgressIndicator progressCpu, progressMemory;
-	private TextView tvCpuUsage, tvMemoryUsage;
+
+	private LinearProgressIndicator progressCpu, progressMemory, progressCpuTemp;
+	private TextView tvCpuUsage, tvMemoryUsage, tvCpuTemp;
+	private TextView tvCpuLabel, tvMemoryLabel;
+
+	private MaterialCardView cardDiskStatus;
+	private LinearLayout layoutDiskDetails;
+	private RelativeLayout layoutDiskHeader;
+	private ImageView ivDiskExpand;
+	private boolean isDiskCardExpanded = false;
+
 	private TextView tvStatTotalValue, tvStatTotalLabel;
 	private TextView tvStatRunningValue, tvStatRunningLabel;
 	private TextView tvStatPendingValue, tvStatPendingLabel;
 	private TextView tvStatErrorValue, tvStatErrorLabel;
 	private LinearLayout statTotalLayout, statRunningLayout, statPendingLayout, statErrorLayout;
+
 	private MaterialButton btnEnterFrpManager, btnViewLogs, btnSettings, btnDebugClear, btnFrpSettings;
 
 	private SshManager sshManager;
@@ -62,10 +70,10 @@ public class MainActivity extends AppCompatActivity {
 	private Handler logRefreshHandler;
 	private Runnable logRefreshRunnable;
 	private boolean isLogViewerActive = false;
-	
+
 	private static final int PICK_KEY_FILE_REQUEST_CODE = 1001;
-    private String selectedKeyContent = null;
-    private String selectedKeyName = null;
+	private String selectedKeyContent = null;
+	private String selectedKeyName = null;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -162,6 +170,8 @@ public class MainActivity extends AppCompatActivity {
 			return portProtocolMap;
 		}
 		for (String identifier : rawIds.trim().split("\\s+")) {
+			if (identifier.isEmpty())
+				continue;
 			String[] parts = identifier.split("_");
 			if (parts.length > 0 && !parts[0].isEmpty()) {
 				String port = parts[0];
@@ -198,10 +208,20 @@ public class MainActivity extends AppCompatActivity {
 
 	private void initViews() {
 		toolbar = findViewById(R.id.toolbar);
+
 		progressCpu = findViewById(R.id.progress_cpu);
 		progressMemory = findViewById(R.id.progress_memory);
 		tvCpuUsage = findViewById(R.id.tv_cpu_usage);
 		tvMemoryUsage = findViewById(R.id.tv_memory_usage);
+		progressCpuTemp = findViewById(R.id.progress_cpu_temp);
+		tvCpuTemp = findViewById(R.id.tv_cpu_temp);
+		tvCpuLabel = findViewById(R.id.tv_cpu_label);
+		tvMemoryLabel = findViewById(R.id.tv_memory_label);
+
+		cardDiskStatus = findViewById(R.id.card_disk_status);
+		layoutDiskHeader = findViewById(R.id.layout_disk_header);
+		layoutDiskDetails = findViewById(R.id.layout_disk_details);
+		ivDiskExpand = findViewById(R.id.iv_disk_expand);
 
 		statTotalLayout = findViewById(R.id.stat_total);
 		tvStatTotalValue = statTotalLayout.findViewById(R.id.tv_stat_value);
@@ -225,7 +245,6 @@ public class MainActivity extends AppCompatActivity {
 		btnViewLogs = findViewById(R.id.btn_view_logs);
 		btnSettings = findViewById(R.id.btn_settings);
 		btnDebugClear = findViewById(R.id.btn_debug_clear);
-
 		btnFrpSettings = findViewById(R.id.btn_frp_settings);
 
 		tvStatTotalLabel.setText("端口总数");
@@ -234,13 +253,15 @@ public class MainActivity extends AppCompatActivity {
 		tvStatErrorLabel.setText("错误");
 
 		btnEnterFrpManager.setOnClickListener(v -> {
-			if (!settingsManager.isConfigured()) return;
+			if (!settingsManager.isConfigured())
+				return;
 			Intent intent = new Intent(MainActivity.this, FrpManagerActivity.class);
 			startActivity(intent);
 		});
 
 		btnViewLogs.setOnClickListener(v -> {
-			if (!settingsManager.isConfigured()) return;
+			if (!settingsManager.isConfigured())
+				return;
 			showServerInfoDialog();
 		});
 
@@ -251,12 +272,9 @@ public class MainActivity extends AppCompatActivity {
 				Toast.makeText(this, "请先配置SSH", Toast.LENGTH_SHORT).show();
 				return;
 			}
-			new MaterialAlertDialogBuilder(this)
-				.setTitle("确认操作")
-				.setMessage("此操作将尝试删除服务器上由本软件创建的所有相关配置和文件，用于重置测试环境。确定要继续吗？")
-				.setNegativeButton("取消", null)
-				.setPositiveButton("确定清除", (dialog, which) -> executeCleanup())
-				.show();
+			new MaterialAlertDialogBuilder(this).setTitle("确认操作")
+				.setMessage("此操作将尝试删除服务器上由本软件创建的所有相关配置和文件，用于重置测试环境。确定要继续吗？").setNegativeButton("取消", null)
+				.setPositiveButton("确定清除", (dialog, which) -> executeCleanup()).show();
 		});
 
 		btnFrpSettings.setOnClickListener(v -> {
@@ -271,6 +289,48 @@ public class MainActivity extends AppCompatActivity {
 		statRunningLayout.setOnClickListener(v -> showPortsDialog("running", "运行中端口列表", runningPortList));
 		statErrorLayout.setOnClickListener(v -> showPortsDialog("error", "错误端口列表", errorPortList));
 		statPendingLayout.setOnClickListener(v -> showPortsDialog("pending", "待应用更改列表", pendingPortList));
+
+		layoutDiskHeader.setOnClickListener(v -> {
+			isDiskCardExpanded = !isDiskCardExpanded;
+			toggleDiskCardWithAnimation(isDiskCardExpanded);
+		});
+	}
+
+	private void toggleDiskCardWithAnimation(boolean expand) {
+		if (expand) {
+			ivDiskExpand.animate().rotation(180).setDuration(300).start();
+			layoutDiskDetails.measure(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+			int targetHeight = layoutDiskDetails.getMeasuredHeight();
+
+			layoutDiskDetails.getLayoutParams().height = 0;
+			layoutDiskDetails.setVisibility(View.VISIBLE);
+
+			ValueAnimator va = ValueAnimator.ofInt(0, targetHeight);
+			va.addUpdateListener(animation -> {
+				layoutDiskDetails.getLayoutParams().height = (Integer) animation.getAnimatedValue();
+				layoutDiskDetails.requestLayout();
+			});
+			va.setDuration(300);
+			va.start();
+		} else {
+			ivDiskExpand.animate().rotation(0).setDuration(300).start();
+			int initialHeight = layoutDiskDetails.getMeasuredHeight();
+
+			ValueAnimator va = ValueAnimator.ofInt(initialHeight, 0);
+			va.addUpdateListener(animation -> {
+				layoutDiskDetails.getLayoutParams().height = (Integer) animation.getAnimatedValue();
+				layoutDiskDetails.requestLayout();
+			});
+			va.addListener(new AnimatorListenerAdapter() {
+					@Override
+					public void onAnimationEnd(Animator animation) {
+						super.onAnimationEnd(animation);
+						layoutDiskDetails.setVisibility(View.GONE);
+					}
+				});
+			va.setDuration(300);
+			va.start();
+		}
 	}
 
 	private void showSshSettingsDialog() {
@@ -297,7 +357,8 @@ public class MainActivity extends AppCompatActivity {
 		etUsername.setText("root");
 		etUsername.setEnabled(false);
 		etUsername.setFocusable(false);
-		layoutPassword.setHelperText("注意：必须使用 root 用户。如果密码登录失败，请检查服务器 /etc/ssh/sshd_config 文件中是否已设置 'PermitRootLogin yes'。");
+		layoutPassword
+			.setHelperText("注意：必须使用 root 用户。如果密码登录失败，请检查服务器 /etc/ssh/sshd_config 文件中是否已设置 'PermitRootLogin yes'。");
 
 		if (settingsManager.isConfigured()) {
 			etHost.setText(settingsManager.getHost());
@@ -325,7 +386,7 @@ public class MainActivity extends AppCompatActivity {
 		switchUseKeyAuth.setOnCheckedChangeListener((buttonView, isChecked) -> {
 			layoutPassword.setVisibility(isChecked ? View.GONE : View.VISIBLE);
 			layoutKeyAuthGroup.setVisibility(isChecked ? View.VISIBLE : View.GONE);
-			if(isChecked){
+			if (isChecked) {
 				tvStatus.setText("请选择私钥文件");
 			} else {
 				tvStatus.setText("请输入密码");
@@ -413,7 +474,8 @@ public class MainActivity extends AppCompatActivity {
 						tvStatus.setText("请先选择私钥文件再保存");
 						return;
 					}
-					settingsManager.saveKeyAuthSettings(host, Integer.parseInt(portStr), user, selectedKeyContent, passphrase);
+					settingsManager.saveKeyAuthSettings(host, Integer.parseInt(portStr), user, selectedKeyContent,
+														passphrase);
 				} else {
 					String pass = etPassword.getText().toString().trim();
 					settingsManager.savePasswordAuthSettings(host, Integer.parseInt(portStr), user, pass);
@@ -448,27 +510,26 @@ public class MainActivity extends AppCompatActivity {
 				}
 
 				String scriptContent = readAssetFile("scripts/check_env.sh");
-				if (scriptContent == null) throw new IOException("无法读取 check_env.sh 脚本");
+				if (scriptContent == null)
+					throw new IOException("无法读取 check_env.sh 脚本");
 
 				String scriptOutput = sshManager.executeCommand(scriptContent, 15).trim();
 				runOnUiThread(() -> {
-					if (loadingDialog != null && loadingDialog.isShowing()) loadingDialog.dismiss();
+					if (loadingDialog != null && loadingDialog.isShowing())
+						loadingDialog.dismiss();
 
 					if (scriptOutput.contains("STATUS:ALL_OK")) {
 						isFirstLoad = true;
 						showLoadingDialog();
 						refreshHandler.post(refreshRunnable);
 					} else if (scriptOutput.contains("STATUS:NEEDS_SETUP")) {
-						new MaterialAlertDialogBuilder(this)
-							.setTitle("环境未配置")
+						new MaterialAlertDialogBuilder(this).setTitle("环境未配置")
 							.setMessage("检测到服务器缺少必要的组件，是否现在开始自动配置？\n\n" + scriptOutput)
 							.setNegativeButton("以后再说", null)
-							.setPositiveButton("开始配置", (d, w) -> showSetupWizardDialog())
-							.show();
+							.setPositiveButton("开始配置", (d, w) -> showSetupWizardDialog()).show();
 					} else {
 						showErrorUI("环境检查失败");
-						new MaterialAlertDialogBuilder(this)
-							.setTitle("未知错误")
+						new MaterialAlertDialogBuilder(this).setTitle("未知错误")
 							.setMessage("无法识别服务器环境，请检查脚本或连接。\n\n--- 检查日志 ---\n" + scriptOutput)
 							.setPositiveButton("好的", null).show();
 					}
@@ -476,35 +537,31 @@ public class MainActivity extends AppCompatActivity {
 
 			} catch (IOException e) {
 				runOnUiThread(() -> {
-					if (loadingDialog != null && loadingDialog.isShowing()) loadingDialog.dismiss();
+					if (loadingDialog != null && loadingDialog.isShowing())
+						loadingDialog.dismiss();
 					showErrorUI("连接或脚本执行失败");
-					new MaterialAlertDialogBuilder(this)
-						.setTitle("验证失败")
-						.setMessage("无法完成服务器验证流程。\n错误详情: " + e.getMessage())
-						.setPositiveButton("好的", null).show();
+					new MaterialAlertDialogBuilder(this).setTitle("验证失败")
+						.setMessage("无法完成服务器验证流程。\n错误详情: " + e.getMessage()).setPositiveButton("好的", null).show();
 				});
 			}
 		});
 	}
 
 	private void showUnsupportedSystemDialog(String osInfo) {
-		if (loadingDialog != null && loadingDialog.isShowing()) loadingDialog.dismiss();
-		new MaterialAlertDialogBuilder(this)
-			.setTitle("操作系统不受支持")
-			.setMessage("本工具目前仅支持基于 systemd 的主流 Linux 发行版 (如 Ubuntu, Debian, CentOS 7+)。\n\n检测到您的系统为:\n" + osInfo + "\n\n请更换系统或手动配置后使用。")
-			.setCancelable(false)
-			.setPositiveButton("返回SSH设置", (d, w) -> showSshSettingsDialog())
-			.show();
+		if (loadingDialog != null && loadingDialog.isShowing())
+			loadingDialog.dismiss();
+		new MaterialAlertDialogBuilder(this).setTitle("操作系统不受支持")
+			.setMessage("本工具目前仅支持基于 systemd 的主流 Linux 发行版 (如 Ubuntu, Debian, CentOS 7+)。\n\n检测到您的系统为:\n" + osInfo
+						+ "\n\n请更换系统或手动配置后使用。")
+			.setCancelable(false).setPositiveButton("返回SSH设置", (d, w) -> showSshSettingsDialog()).show();
 	}
 
 	private void showNonRootUserDialog() {
-		if (loadingDialog != null && loadingDialog.isShowing()) loadingDialog.dismiss();
-		new MaterialAlertDialogBuilder(this)
-			.setTitle("需要 Root 权限")
+		if (loadingDialog != null && loadingDialog.isShowing())
+			loadingDialog.dismiss();
+		new MaterialAlertDialogBuilder(this).setTitle("需要 Root 权限")
 			.setMessage("为了执行自动化配置和管理，本工具要求必须使用 'root' 用户进行 SSH 连接。\n\n请在下方的设置中使用 root 用户信息登录。")
-			.setCancelable(false)
-			.setPositiveButton("返回SSH设置", (d, w) -> showSshSettingsDialog())
-			.show();
+			.setCancelable(false).setPositiveButton("返回SSH设置", (d, w) -> showSshSettingsDialog()).show();
 	}
 
 	private void showSetupWizardDialog() {
@@ -534,7 +591,7 @@ public class MainActivity extends AppCompatActivity {
 			if (currentPage == 0) {
 				viewAnimator.setDisplayedChild(1);
 				btnBack.setVisibility(View.VISIBLE);
-				btnNext.setText("开始配置");
+				btnNext.setText("下一步");
 			} else if (currentPage == 1) {
 				btnBack.setVisibility(View.GONE);
 				btnNext.setVisibility(View.GONE);
@@ -547,7 +604,8 @@ public class MainActivity extends AppCompatActivity {
 				TextView tvStatus = pageProgress.findViewById(R.id.tv_setup_status);
 				LinearProgressIndicator progressBar = pageProgress.findViewById(R.id.progress_indicator_setup);
 
-				startSetupTask(dialog, dialogView, pageProgress, pageCompletion, tvProgressTitle, tvStatus, progressBar, viewAnimator);
+				startSetupTask(dialog, dialogView, pageProgress, pageCompletion, tvProgressTitle, tvStatus, progressBar,
+							   viewAnimator);
 			}
 		});
 
@@ -566,8 +624,7 @@ public class MainActivity extends AppCompatActivity {
 	private File copyAssetToCache(String assetPath, String cacheFileName) throws IOException {
 		AssetManager assetManager = getAssets();
 		File cacheFile = new File(getCacheDir(), cacheFileName);
-		try (InputStream in = assetManager.open(assetPath);
-			 FileOutputStream out = new FileOutputStream(cacheFile)) {
+		try (InputStream in = assetManager.open(assetPath); FileOutputStream out = new FileOutputStream(cacheFile)) {
 			byte[] buffer = new byte[1024];
 			int read;
 			while ((read = in.read(buffer)) != -1) {
@@ -577,7 +634,9 @@ public class MainActivity extends AppCompatActivity {
 		return cacheFile;
 	}
 
-	private void startSetupTask(AlertDialog dialog, View dialogView, View pageProgress, View pageCompletion, TextView tvProgressTitle, TextView tvStatus, LinearProgressIndicator progressBar, ViewAnimator viewAnimator) {
+	private void startSetupTask(AlertDialog dialog, View dialogView, View pageProgress, View pageCompletion,
+								TextView tvProgressTitle, TextView tvStatus, LinearProgressIndicator progressBar,
+								ViewAnimator viewAnimator) {
 		executor.execute(() -> {
 			try {
 				runOnUiThread(() -> {
@@ -623,13 +682,8 @@ public class MainActivity extends AppCompatActivity {
 									checkMark.setScaleX(0.5f);
 									checkMark.setScaleY(0.5f);
 
-									checkMark.animate()
-										.alpha(1f)
-										.scaleX(1f)
-										.scaleY(1f)
-										.setDuration(800)
-										.setInterpolator(new OvershootInterpolator())
-										.start();
+									checkMark.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(800)
+										.setInterpolator(new OvershootInterpolator()).start();
 								}
 								new Handler(Looper.getMainLooper()).postDelayed(() -> {
 									dialog.dismiss();
@@ -658,7 +712,7 @@ public class MainActivity extends AppCompatActivity {
 			}
 		});
 	}
-	
+
 	@Override
 	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
 		super.onActivityResult(requestCode, resultCode, data);
@@ -668,8 +722,6 @@ public class MainActivity extends AppCompatActivity {
 				try {
 					selectedKeyContent = readTextFromUri(uri);
 					selectedKeyName = getFileNameFromUri(uri);
-					AlertDialog dialog = (AlertDialog) new MaterialAlertDialogBuilder(this).create();
-					View dialogView = dialog.findViewById(R.id.tv_key_path); 
 					Toast.makeText(this, "已选择密钥: " + selectedKeyName, Toast.LENGTH_SHORT).show();
 
 				} catch (IOException e) {
@@ -690,7 +742,7 @@ public class MainActivity extends AppCompatActivity {
 		}
 		return stringBuilder.toString();
 	}
-	
+
 	private String getFileNameFromUri(Uri uri) {
 		String result = null;
 		if (uri.getScheme().equals("content")) {
@@ -726,20 +778,18 @@ public class MainActivity extends AppCompatActivity {
 		etPort.setText(String.valueOf(settingsManager.getFrpServerPort()));
 		etToken.setText(settingsManager.getFrpToken());
 
-		builder.setView(dialogView)
-			.setTitle("FRP 通用配置")
-			.setNegativeButton("取消", null)
+		builder.setView(dialogView).setTitle("FRP 通用配置").setNegativeButton("取消", null)
 			.setPositiveButton("保存", (d, w) -> {
-				String addr = etAddr.getText().toString().trim();
-				String portStr = etPort.getText().toString().trim();
-				if(addr.isEmpty() || portStr.isEmpty()){
-					Toast.makeText(this, "地址和端口不能为空", Toast.LENGTH_SHORT).show();
-					return;
-				}
-				settingsManager.saveFrpCommonSettings(addr, Integer.parseInt(portStr), etToken.getText().toString().trim());
-				Toast.makeText(this, "通用配置已保存", Toast.LENGTH_SHORT).show();
-			})
-			.show();
+			String addr = etAddr.getText().toString().trim();
+			String portStr = etPort.getText().toString().trim();
+			if (addr.isEmpty() || portStr.isEmpty()) {
+				Toast.makeText(this, "地址和端口不能为空", Toast.LENGTH_SHORT).show();
+				return;
+			}
+			settingsManager.saveFrpCommonSettings(addr, Integer.parseInt(portStr),
+												  etToken.getText().toString().trim());
+			Toast.makeText(this, "通用配置已保存", Toast.LENGTH_SHORT).show();
+		}).show();
 	}
 
 	private void showServerInfoDialog() {
@@ -753,12 +803,8 @@ public class MainActivity extends AppCompatActivity {
 		contentTextView.setMovementMethod(ScrollingMovementMethod.getInstance());
 		contentTextView.setText("");
 
-		final AlertDialog infoDialog = new MaterialAlertDialogBuilder(this)
-			.setTitle("服务器状态总览")
-			.setView(dialogView)
-			.setPositiveButton("刷新", null)
-			.setNegativeButton("关闭", null)
-			.create();
+		final AlertDialog infoDialog = new MaterialAlertDialogBuilder(this).setTitle("服务器状态总览").setView(dialogView)
+			.setPositiveButton("刷新", null).setNegativeButton("关闭", null).create();
 
 		infoDialog.setOnShowListener(dialog -> {
 			Button refreshButton = infoDialog.getButton(AlertDialog.BUTTON_POSITIVE);
@@ -801,7 +847,8 @@ public class MainActivity extends AppCompatActivity {
 				summary.append("● 系统已运行: ").append(uptime).append("\n");
 				summary.append("● 系统负载 (1/5/15min): ").append(load).append("\n");
 			}
-		} catch (Exception e) { /* ignore */ }
+		} catch (Exception e) {
+		}
 
 		try {
 			String memLine = "";
@@ -816,7 +863,8 @@ public class MainActivity extends AppCompatActivity {
 				String[] parts = memLine.trim().split("\\s+");
 				summary.append("● 内存使用: ").append(parts[2]).append(" / ").append(parts[1]).append("\n");
 			}
-		} catch (Exception e) { /* ignore */ }
+		} catch (Exception e) {
+		}
 
 		summary.append("● 硬盘使用:\n");
 		try {
@@ -830,8 +878,7 @@ public class MainActivity extends AppCompatActivity {
 						String used = parts[2];
 						String size = parts[1];
 						String usePercent = parts[4];
-						summary.append("  - ").append(mountPoint).append(": ")
-							.append(used).append(" / ").append(size)
+						summary.append("  - ").append(mountPoint).append(": ").append(used).append(" / ").append(size)
 							.append(" (").append(usePercent).append(")\n");
 						foundDisks = true;
 					}
@@ -861,19 +908,13 @@ public class MainActivity extends AppCompatActivity {
 
 		executor.execute(() -> {
 			try {
-				String command = "echo '--- 系统负载与运行时间 ---'; " +
-					"uptime; " +
-					"echo; echo '--- 内存使用情况 ---'; " +
-					"free -h; " +
-					"echo; echo '--- 硬盘使用情况 ---'; " +
-					"df -h | grep -E '^/dev/|Filesystem'; " +
-					"echo; echo '---INTERNAL_IP---'; " +
-					"hostname -I | awk '{print $1}'; " +
-					"echo; echo '---FIREWALL_TYPE---'; " +
-					"if systemctl is-active --quiet firewalld; then echo 'firewalld'; " +
-					"elif command -v ufw >/dev/null && ufw status | grep -q 'Status: active'; then echo 'ufw'; " +
-					"elif command -v iptables >/dev/null; then echo 'iptables'; " +
-					"else echo 'none'; fi";
+				String command = "echo '--- 系统负载与运行时间 ---'; " + "uptime; " + "echo; echo '--- 内存使用情况 ---'; "
+					+ "free -h; " + "echo; echo '--- 硬盘使用情况 ---'; " + "df -h | grep -E '^/dev/|Filesystem'; "
+					+ "echo; echo '---INTERNAL_IP---'; " + "hostname -I | awk '{print $1}'; "
+					+ "echo; echo '---FIREWALL_TYPE---'; "
+					+ "if systemctl is-active --quiet firewalld; then echo 'firewalld'; "
+					+ "elif command -v ufw >/dev/null && ufw status | grep -q 'Status: active'; then echo 'ufw'; "
+					+ "elif command -v iptables >/dev/null; then echo 'iptables'; " + "else echo 'none'; fi";
 
 				final String serverInfoRaw = sshManager.executeCommand(command, 45);
 
@@ -909,16 +950,15 @@ public class MainActivity extends AppCompatActivity {
 
 					try {
 						String versionName = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
-						String toolInfo = "\n❖ FRP Manager - 版本: " + versionName + " ❖\n\n" +
-							"by - Momu\n";
+						String toolInfo = "\n❖ FRP Manager - 版本: " + versionName + " ❖\n\n" + "by - Momu\n";
 						appendLog(textView, scrollView, logBuilder, toolInfo, "info");
 					} catch (Exception e) {
 					}
 
 					appendLog(textView, scrollView, logBuilder, summary, "success");
 
-					String finalInfo = "服务器公网IP: " + settingsManager.getHost() + "\n" +
-						"服务器内网IP: " + finalInternalIp + "\n";
+					String finalInfo = "服务器公网IP: " + settingsManager.getHost() + "\n" + "服务器内网IP: " + finalInternalIp
+						+ "\n";
 					appendLog(textView, scrollView, logBuilder, finalInfo, "success");
 
 					copyButton.setEnabled(true);
@@ -936,15 +976,24 @@ public class MainActivity extends AppCompatActivity {
 		});
 	}
 
-	private void appendLog(TextView textView, ScrollView scrollView, StringBuilder logBuilder, String message, String type) {
+	private void appendLog(TextView textView, ScrollView scrollView, StringBuilder logBuilder, String message,
+						   String type) {
 		runOnUiThread(() -> {
 			String color;
 			switch (type) {
-				case "success": color = "#4CAF50"; break;
-				case "error": color = "#F44336"; break;
-				case "info": default: color = "#FFFFFF"; break;
+				case "success" :
+					color = "#4CAF50";
+					break;
+				case "error" :
+					color = "#F44336";
+					break;
+				case "info" :
+				default :
+					color = "#FFFFFF";
+					break;
 			}
-			String formattedMessage = "<font color='" + color + "'>" + TextUtils.htmlEncode(message).replace("\n", "<br>") + "</font><br>";
+			String formattedMessage = "<font color='" + color + "'>"
+				+ TextUtils.htmlEncode(message).replace("\n", "<br>") + "</font><br>";
 			logBuilder.append(message).append("\n");
 			textView.append(Html.fromHtml(formattedMessage, Html.FROM_HTML_MODE_LEGACY));
 
@@ -963,60 +1012,62 @@ public class MainActivity extends AppCompatActivity {
 	}
 
 	private void refreshDashboardData() {
-		if (!settingsManager.isConfigured()) {
+		if (!settingsManager.isConfigured() || sshManager == null) {
 			showErrorUI("SSH未配置或环境不安全");
 			return;
 		}
 
 		executor.execute(() -> {
-			final String SEPARATOR = "---DASHBOARD_SEP---";
-			String command = "top -bn1 | grep 'Cpu(s)' | awk '{printf \"%.0f\", $2 + $4}';" +
-				"echo " + SEPARATOR + ";" +
-				"free -m | grep Mem | awk '{printf \"%.0f\", $3/$2 * 100.0}';" +
-				"echo " + SEPARATOR + ";" +
-				"find /etc/frp/conf.d/ -type f \\( -name 'port_*.ini' -o -name 'port_*.ini.disabled' \\) -printf '%f\\n';" +
-				"echo " + SEPARATOR + ";" +
-				"systemctl list-units --type=service --state=running 'frpc@*.service' --no-pager | grep -oP 'frpc@\\K[^.]+';" +
-				"echo " + SEPARATOR + ";" +
-				"systemctl list-unit-files 'frpc@*.service' --no-pager | grep 'enabled' | grep -oP 'frpc@\\K[^.]+';";
+			String currentStep = "初始化刷新任务 (Initializing refresh task)";
+			final String remotePath = "/tmp/get_stats.sh";
+			File scriptFile = null;
 
 			try {
-				String result = sshManager.executeCommand(command);
-				String[] sections = result.split(SEPARATOR);
+				currentStep = "从Assets复制脚本到本地缓存 (Copying script from assets to local cache)";
+				scriptFile = copyAssetToCache("get_stats.sh", "get_stats.sh");
 
-				if (sections.length < 5) {
-					throw new IOException("从服务器返回的数据格式不完整");
+				currentStep = "通过SFTP上传脚本到 " + remotePath + " (Uploading script via SFTP)";
+				try (SFTPClient sftp = sshManager.getSftpClient()) {
+					sftp.put(scriptFile.getAbsolutePath(), remotePath);
 				}
 
-				final int cpuUsage = sections[0].trim().isEmpty() ? 0 : Integer.parseInt(sections[0].trim());
-				final int memUsage = sections[1].trim().isEmpty() ? 0 : Integer.parseInt(sections[1].trim());
+				currentStep = "在服务器上为脚本添加执行权限 (chmod +x " + remotePath + ")";
+				sshManager.executeCommand("chmod +x " + remotePath);
 
-				String rawFileNames = sections[2];
-				String rawRunningIds = sections[3];
-				String rawEnabledIds = sections[4];
+				currentStep = "在服务器上执行脚本 " + remotePath + " (Executing script on server)";
+				String jsonResult = sshManager.executeCommand(remotePath);
+
+				currentStep = "在服务器上删除临时脚本 " + remotePath + " (Cleaning up temporary script)";
+				sshManager.executeCommand("rm " + remotePath);
+
+				currentStep = "解析服务器返回的JSON数据 (Parsing JSON response)";
+				if (jsonResult == null || jsonResult.trim().isEmpty()) {
+					throw new IOException("执行远程脚本后返回了空响应。");
+				}
+				JSONObject json = new JSONObject(jsonResult);
+
+				final int cpuUsage = json.optInt("cpuUsage", 0);
+				final int memUsage = json.optInt("memUsage", 0);
+				final int cpuTemp = json.optInt("cpuTemp", 0) / 1000;
+				final String dfOutput = json.optString("dfOutput", "").replace("\\n", "\n").trim();
+				final String lsblkOutput = json.optString("lsblkOutput", "").replace("\\n", "\n").trim();
+				final String rawFileNames = json.optString("frpTotalFiles", "").replace("\\n", "\n").trim();
+				final String rawRunningIds = json.optString("frpRunningServices", "").replace("\\n", "\n").trim();
+				final String rawEnabledIds = json.optString("frpEnabledServices", "").replace("\\n", "\n").trim();
+				final String cpuModel = json.optString("cpuModel", "CPU");
+				final String memoryDetails = json.optString("memoryDetails", "内存");
+				final String coreCount = String.valueOf(json.optInt("coreCount", 0));
 
 				Map<String, Set<String>> totalPortMap = parseFileNamesToPortMap(rawFileNames);
 				this.totalPortList = formatPortMapToList(totalPortMap);
-
 				Map<String, Set<String>> runningPortMap = parseServiceIdsToPortMap(rawRunningIds);
 				this.runningPortList = formatPortMapToList(runningPortMap);
-
-				Set<String> runningIdSet = new HashSet<>();
-				if (!rawRunningIds.trim().isEmpty()) {
-					runningIdSet.addAll(Arrays.asList(rawRunningIds.trim().split("\\s+")));
-				}
-
-				Set<String> enabledIdSet = new HashSet<>();
-				if (!rawEnabledIds.trim().isEmpty()) {
-					enabledIdSet.addAll(Arrays.asList(rawEnabledIds.trim().split("\\s+")));
-				}
-
+				Set<String> runningIdSet = new HashSet<>(!rawRunningIds.trim().isEmpty() ? Arrays.asList(rawRunningIds.trim().split("\\s+")) : Collections.emptySet());
+				Set<String> enabledIdSet = new HashSet<>(!rawEnabledIds.trim().isEmpty() ? Arrays.asList(rawEnabledIds.trim().split("\\s+")) : Collections.emptySet());
 				enabledIdSet.removeAll(runningIdSet);
-
 				String errorIds = String.join(" ", enabledIdSet);
 				Map<String, Set<String>> errorPortMap = parseServiceIdsToPortMap(errorIds);
 				this.errorPortList = formatPortMapToList(errorPortMap);
-
 				this.pendingPortList.clear();
 
 				runOnUiThread(() -> {
@@ -1024,32 +1075,177 @@ public class MainActivity extends AppCompatActivity {
 						loadingDialog.dismiss();
 						isFirstLoad = false;
 					}
-					updateServerStatusUI(cpuUsage, memUsage);
+					updateServerStatusUI(cpuUsage, memUsage, cpuTemp, dfOutput, lsblkOutput, cpuModel, memoryDetails, coreCount);
 					updateFrpOverviewUI(totalPortMap.size(), runningPortMap.size(), pendingPortList.size(), errorPortMap.size());
 				});
 
-			} catch (IOException | NumberFormatException e) {
-				final String errorMessage = e.getMessage();
+			} catch (Exception e) {
+				final String finalCurrentStep = currentStep;
 				runOnUiThread(() -> {
 					if (isFirstLoad && loadingDialog != null) {
 						loadingDialog.dismiss();
 						isFirstLoad = false;
 					}
-					showErrorUI("错误: " + errorMessage);
+					refreshHandler.removeCallbacks(refreshRunnable);
+					showErrorUI("刷新失败，请查看诊断报告");
+					showDebugDialog("刷新操作失败 (诊断信息)",
+									"失败步骤 (Failed Step):\n" + finalCurrentStep + "\n\n" +
+									"错误类型 (Error Type):\n" + e.getClass().getSimpleName() + "\n\n" +
+									"错误信息 (Error Message):\n" + e.getMessage()
+									);
 				});
-				refreshHandler.removeCallbacks(refreshRunnable);
 				e.printStackTrace();
 			}
 		});
 	}
 
-	private void updateServerStatusUI(int cpu, int mem) {
-		progressCpu.setIndeterminate(false);
-		progressMemory.setIndeterminate(false);
-		progressCpu.setProgress(cpu);
+	private void showDebugDialog(String title, String message) {
+		if (isFinishing() || isDestroyed()) {
+			return;
+		}
+
+		TextView tv = new TextView(this);
+		tv.setText(message);
+		tv.setTextIsSelectable(true);
+		tv.setPadding(40, 20, 40, 20);
+		ScrollView scrollView = new ScrollView(this);
+		scrollView.addView(tv);
+
+		new MaterialAlertDialogBuilder(this)
+			.setTitle(title)
+			.setView(scrollView)
+			.setCancelable(false)
+			.setPositiveButton("复制并关闭", (dialog, which) -> {
+			            ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+			            ClipData clip = ClipData.newPlainText("Server Diag Log", message);
+			            clipboard.setPrimaryClip(clip);
+			            Toast.makeText(this, "日志已复制", Toast.LENGTH_SHORT).show();
+			            dialog.dismiss();
+		        })
+		        .show();
+	}
+
+	private void updateServerStatusUI(int cpu, int mem, int temp, String dfOutput, String lsblkOutput, String cpuModel, String memoryDetails, String coreCount) {
+		progressCpu.setProgressCompat(cpu, true);
+		progressMemory.setProgressCompat(mem, true);
+		progressCpuTemp.setProgressCompat(Math.min(temp, 100), true);
+
+		String simplifiedCpuModel = cpuModel.replaceAll("\\(R\\)|\\(TM\\)| CPU |@.*GHz", "").replaceAll("\\s+", " ");
+		String cpuLabelText = simplifiedCpuModel.isEmpty() ? "CPU" : simplifiedCpuModel;
+		if (!coreCount.isEmpty()) {
+			try {
+				if (Integer.parseInt(coreCount) > 0) {
+					cpuLabelText += " (" + coreCount + " Cores)";
+				}
+			} catch (NumberFormatException e) {
+
+			}
+		}
+		tvCpuLabel.setText(cpuLabelText);
+		tvMemoryLabel.setText(memoryDetails.isEmpty() ? "内存" : memoryDetails);
+
 		tvCpuUsage.setText(cpu + "%");
-		progressMemory.setProgress(mem);
 		tvMemoryUsage.setText(mem + "%");
+		tvCpuTemp.setText(temp + "°C");
+
+		updateDiskStatusCard(dfOutput, lsblkOutput);
+	}
+
+	private void updateDiskStatusCard(String dfOutput, String lsblkOutput) {
+		boolean wasExpanded = layoutDiskDetails.getVisibility() == View.VISIBLE;
+		if(wasExpanded) {
+			layoutDiskDetails.getLayoutParams().height = ViewGroup.LayoutParams.WRAP_CONTENT;
+		}
+		layoutDiskDetails.removeAllViews();
+		cardDiskStatus.setVisibility(View.VISIBLE);
+
+		if (dfOutput.isEmpty() && lsblkOutput.isEmpty()) {
+			TextView errorView = new TextView(this);
+			errorView.setText("未能获取到任何硬盘信息");
+			errorView.setPadding(0, 16, 0, 16);
+			layoutDiskDetails.addView(errorView);
+			return;
+		}
+
+		Map<String, DiskInfo> mountedDisksMap = new HashMap<>();
+		String[] dfLines = dfOutput.split("\n");
+		for (String line : dfLines) {
+			if (line.toLowerCase().startsWith("filesystem")) continue;
+			String[] parts = line.trim().split("\\s+");
+			if (parts.length < 7) continue;
+			try {
+				String fsName = parts[0];
+				String size = parts[2];
+				String used = parts[3];
+				int usePercent = Integer.parseInt(parts[5].replace("%", ""));
+				String mountPoint = parts[6];
+				mountedDisksMap.put(fsName, new DiskInfo(fsName, size, used, usePercent, mountPoint));
+			} catch (Exception e) {
+				Log.e("DiskParse", "Could not parse df line: " + line, e);
+			}
+		}
+
+		Set<String> parentDisksWithMounts = new HashSet<>();
+		for (String mountedPartition : mountedDisksMap.keySet()) {
+			String parent = mountedPartition.replaceAll("/dev/|p?[0-9]+$", "");
+			parentDisksWithMounts.add(parent);
+		}
+
+		List<DiskInfo> unmountedDisks = new ArrayList<>();
+		String[] lsblkLines = lsblkOutput.split("\n");
+		for(String line : lsblkLines) {
+			String[] parts = line.trim().split("\\s+");
+			if (parts.length < 3) continue;
+
+			String deviceName = parts[0];
+			String deviceType = parts[2];
+
+			if("disk".equals(deviceType)){
+				if(!parentDisksWithMounts.contains(deviceName)){
+					String size = parts[1];
+					unmountedDisks.add(new DiskInfo(deviceName, size));
+				}
+			}
+		}
+
+		LayoutInflater inflater = LayoutInflater.from(this);
+		List<DiskInfo> sortedMountedDisks = new ArrayList<>(mountedDisksMap.values());
+		sortedMountedDisks.sort(Comparator.comparing(d -> d.deviceName));
+
+		for (DiskInfo disk : sortedMountedDisks) {
+			View diskItemView = inflater.inflate(R.layout.include_disk_item, layoutDiskDetails, false);
+			TextView tvMountPoint = diskItemView.findViewById(R.id.tv_disk_mount_point);
+			TextView tvUsageDetails = diskItemView.findViewById(R.id.tv_disk_usage_details);
+			TextView tvUsagePercent = diskItemView.findViewById(R.id.tv_disk_usage_percent);
+			LinearProgressIndicator progressDisk = diskItemView.findViewById(R.id.progress_disk_item);
+
+			tvMountPoint.setText(disk.deviceName);
+			tvUsageDetails.setText(String.format("%s / %s (挂载于 %s)", disk.usedSize, disk.totalSize, disk.mountPoint));
+			tvUsagePercent.setText(disk.usePercent + "%");
+			progressDisk.setProgress(disk.usePercent);
+			layoutDiskDetails.addView(diskItemView);
+		}
+
+		if (!unmountedDisks.isEmpty() && !sortedMountedDisks.isEmpty()) {
+			View divider = new View(this);
+			LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 2);
+			params.setMargins(0, 24, 0, 24);
+			divider.setLayoutParams(params);
+			divider.setBackgroundColor(Color.DKGRAY);
+			layoutDiskDetails.addView(divider);
+		}
+
+		unmountedDisks.sort(Comparator.comparing(d -> d.deviceName));
+		for (DiskInfo disk : unmountedDisks) {
+			View unmountedView = inflater.inflate(R.layout.include_unmounted_disk_item, layoutDiskDetails, false);
+			TextView tvName = unmountedView.findViewById(R.id.tv_unmounted_disk_name);
+			TextView tvSize = unmountedView.findViewById(R.id.tv_unmounted_disk_size);
+			tvName.setText("/dev/" + disk.deviceName);
+			tvSize.setText("总容量: " + disk.totalSize);
+			layoutDiskDetails.addView(unmountedView);
+		}
+
+		layoutDiskDetails.setVisibility(wasExpanded ? View.VISIBLE : View.GONE);
 	}
 
 	private void updateFrpOverviewUI(int total, int running, int pending, int error) {
@@ -1062,10 +1258,14 @@ public class MainActivity extends AppCompatActivity {
 	private void showErrorUI(String message) {
 		progressCpu.setIndeterminate(true);
 		progressMemory.setIndeterminate(true);
-		progressCpu.setProgress(0);
-		progressMemory.setProgress(0);
+		progressCpuTemp.setIndeterminate(true);
+
 		tvCpuUsage.setText(message);
 		tvMemoryUsage.setText("错误");
+		tvCpuTemp.setText("...");
+
+		cardDiskStatus.setVisibility(View.GONE);
+
 		tvStatTotalValue.setText("-");
 		tvStatRunningValue.setText("-");
 		tvStatPendingValue.setText("-");
@@ -1117,7 +1317,8 @@ public class MainActivity extends AppCompatActivity {
 		ScrollView scrollView = dialogView.findViewById(R.id.log_scroll_view);
 		final TextView logContent = dialogView.findViewById(R.id.log_text_view);
 		Button copyButton = dialogView.findViewById(R.id.btn_copy_log);
-		if (copyButton != null) copyButton.setVisibility(View.GONE);
+		if (copyButton != null)
+			copyButton.setVisibility(View.GONE);
 		isLogViewerActive = true;
 		AlertDialog logDialog = builder.create();
 		logDialog.setOnDismissListener(dialog -> {
@@ -1131,13 +1332,14 @@ public class MainActivity extends AppCompatActivity {
 		logRefreshRunnable = new Runnable() {
 			@Override
 			public void run() {
-				if (!isLogViewerActive) return;
+				if (!isLogViewerActive)
+					return;
 
 				executor.execute(() -> {
-					String logCommand = String.format("echo '---SYSTEMD STATUS---' && " +
-						"systemctl status frpc@%s.service --no-pager && " +
-						"echo '\n---JOURNAL LOGS (last 20 lines)---' && " +
-						"journalctl -u frpc@%s.service --no-pager -n 20",
+					String logCommand = String.format(
+						"echo '---SYSTEMD STATUS---' && " + "systemctl status frpc@%s.service --no-pager && "
+						+ "echo '\n---JOURNAL LOGS (last 20 lines)---' && "
+						+ "journalctl -u frpc@%s.service --no-pager -n 20",
 						port, port);
 					try {
 						String rawLogs = sshManager.executeCommand(logCommand);
@@ -1171,7 +1373,8 @@ public class MainActivity extends AppCompatActivity {
 		Pattern successPattern = Pattern.compile("active \\(running\\)", Pattern.CASE_INSENSITIVE);
 		Matcher successMatcher = successPattern.matcher(rawLogs);
 		while (successMatcher.find()) {
-			spannable.setSpan(new ForegroundColorSpan(Color.parseColor("#4CAF50")), successMatcher.start(), successMatcher.end(), 0);
+			spannable.setSpan(new ForegroundColorSpan(Color.parseColor("#4CAF50")), successMatcher.start(),
+							  successMatcher.end(), 0);
 		}
 
 		Pattern inactivePattern = Pattern.compile("inactive \\(dead\\)", Pattern.CASE_INSENSITIVE);
@@ -1208,21 +1411,12 @@ public class MainActivity extends AppCompatActivity {
 					Log.d("SSH_DEBUG", "Key starts with: " + key.substring(0, Math.min(key.length(), 30)));
 				}
 
-				sshManager = new SshManager(
-					settingsManager.getHost(),
-					settingsManager.getPort(),
-					settingsManager.getUsername(),
-					key,
-					settingsManager.getPassphrase()
-				);
+				sshManager = new SshManager(settingsManager.getHost(), settingsManager.getPort(),
+											settingsManager.getUsername(), key, settingsManager.getPassphrase());
 			} else {
 				Log.d("SSH_DEBUG", "Initializing with PASSWORD auth.");
-				sshManager = new SshManager(
-					settingsManager.getHost(),
-					settingsManager.getPort(),
-					settingsManager.getUsername(),
-					settingsManager.getPassword()
-				);
+				sshManager = new SshManager(settingsManager.getHost(), settingsManager.getPort(),
+											settingsManager.getUsername(), settingsManager.getPassword());
 			}
 		} else {
 			Log.d("SSH_DEBUG", "Not configured. Initializing with null settings.");
@@ -1231,25 +1425,21 @@ public class MainActivity extends AppCompatActivity {
 	}
 
 	private void executeCleanup() {
-		final AlertDialog dialog = new MaterialAlertDialogBuilder(this)
-			.setView(R.layout.dialog_loading)
-			.setCancelable(false)
-			.show();
+		final AlertDialog dialog = new MaterialAlertDialogBuilder(this).setView(R.layout.dialog_loading)
+			.setCancelable(false).show();
 
 		executor.execute(() -> {
 			try {
 				String scriptContent = readAssetFile("scripts/cleanup.sh");
-				if (scriptContent == null) throw new IOException("无法读取清理脚本");
+				if (scriptContent == null)
+					throw new IOException("无法读取清理脚本");
 
 				String result = sshManager.executeCommand(scriptContent, 60);
 
 				runOnUiThread(() -> {
 					dialog.dismiss();
-					new MaterialAlertDialogBuilder(this)
-						.setTitle("操作完成")
-						.setMessage("清理脚本已执行完毕。\n\n服务器返回:\n" + result)
-						.setPositiveButton("好的", null)
-						.show();
+					new MaterialAlertDialogBuilder(this).setTitle("操作完成").setMessage("清理脚本已执行完毕。\n\n服务器返回:\n" + result)
+						.setPositiveButton("好的", null).show();
 				});
 			} catch (IOException e) {
 				runOnUiThread(() -> {
@@ -1262,7 +1452,7 @@ public class MainActivity extends AppCompatActivity {
 
 	private String readAssetFile(String fileName) {
 		try (InputStream is = getAssets().open(fileName);
-			 BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
+		BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
 			StringBuilder sb = new StringBuilder();
 			String line;
 			while ((line = reader.readLine()) != null) {
@@ -1272,6 +1462,31 @@ public class MainActivity extends AppCompatActivity {
 		} catch (IOException e) {
 			e.printStackTrace();
 			return null;
+		}
+	}
+
+	private static class DiskInfo {
+		String deviceName;
+		String totalSize;
+		boolean isMounted;
+
+		String usedSize;
+		int usePercent;
+		String mountPoint;
+
+		public DiskInfo(String deviceName, String totalSize, String usedSize, int usePercent, String mountPoint) {
+			this.isMounted = true;
+			this.deviceName = deviceName;
+			this.totalSize = totalSize;
+			this.usedSize = usedSize;
+			this.usePercent = usePercent;
+			this.mountPoint = mountPoint;
+		}
+
+		public DiskInfo(String deviceName, String totalSize) {
+			this.isMounted = false;
+			this.deviceName = deviceName;
+			this.totalSize = totalSize;
 		}
 	}
 }
