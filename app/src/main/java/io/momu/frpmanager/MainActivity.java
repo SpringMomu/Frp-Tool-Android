@@ -878,17 +878,17 @@ public class MainActivity extends AppCompatActivity {
 						String used = parts[2];
 						String size = parts[1];
 						String usePercent = parts[4];
-						summary.append("  - ").append(mountPoint).append(": ").append(used).append(" / ").append(size)
+						summary.append(" - ").append(mountPoint).append(": ").append(used).append(" / ").append(size)
 							.append(" (").append(usePercent).append(")\n");
 						foundDisks = true;
 					}
 				}
 			}
 			if (!foundDisks) {
-				summary.append("  - 未能获取到硬盘信息。\n");
+				summary.append(" - 未能获取到硬盘信息。\n");
 			}
 		} catch (Exception e) {
-			summary.append("  - 解析硬盘信息时出错。\n");
+			summary.append(" - 解析硬盘信息时出错。\n");
 		}
 
 		summary.append("● 检测到防火墙: ").append("none".equals(firewallType) ? "无" : firewallType).append("\n");
@@ -1116,13 +1116,13 @@ public class MainActivity extends AppCompatActivity {
 			.setView(scrollView)
 			.setCancelable(false)
 			.setPositiveButton("复制并关闭", (dialog, which) -> {
-			            ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-			            ClipData clip = ClipData.newPlainText("Server Diag Log", message);
-			            clipboard.setPrimaryClip(clip);
-			            Toast.makeText(this, "日志已复制", Toast.LENGTH_SHORT).show();
-			            dialog.dismiss();
-		        })
-		        .show();
+			      ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+			      ClipData clip = ClipData.newPlainText("Server Diag Log", message);
+			      clipboard.setPrimaryClip(clip);
+			      Toast.makeText(this, "日志已复制", Toast.LENGTH_SHORT).show();
+			      dialog.dismiss();
+		    })
+		    .show();
 	}
 
 	private void updateServerStatusUI(int cpu, int mem, int temp, String dfOutput, String lsblkOutput, String cpuModel, String memoryDetails, String coreCount) {
