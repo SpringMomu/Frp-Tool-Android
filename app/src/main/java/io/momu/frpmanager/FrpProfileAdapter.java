@@ -1,7 +1,7 @@
 package io.momu.frpmanager;
 
 import android.content.Context;
-import android.graphics.Color;
+import android.content.res.ColorStateList;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -9,12 +9,15 @@ import android.widget.CheckBox;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
+import androidx.core.widget.TextViewCompat;
 import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
+import com.google.android.material.card.MaterialCardView;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -51,7 +54,7 @@ public class FrpProfileAdapter extends RecyclerView.Adapter<FrpProfileAdapter.Pr
     public void onBindViewHolder(@NonNull ProfileViewHolder holder, int position) {
         final FrpProfile profile = profiles.get(position);
         holder.tvRemotePort.setText(String.valueOf(profile.getRemotePort()));
-        holder.tvProtocol.setText(profile.getProtocol() != null ? profile.getProtocol().toUpperCase() : "N/A");
+        holder.tvProtocol.setText(profile.getProtocol() != null ? profile.getProtocol().toUpperCase(Locale.US) : "N/A");
         holder.tvMapping.setText("映射到 " + profile.getLocalIp() + ":" + profile.getLocalPort());
         if (profile.getProxyProtocolVersion() != null && !profile.getProxyProtocolVersion().isEmpty()) {
             holder.tvProxyProtocol.setText("Proxy Protocol: " + profile.getProxyProtocolVersion());
@@ -65,36 +68,54 @@ public class FrpProfileAdapter extends RecyclerView.Adapter<FrpProfileAdapter.Pr
         } else {
             holder.tvTag.setVisibility(View.GONE);
         }
-        String statusText = profile.getStatus();
+        String statusText = profile.getStatus() == null ? "未知" : profile.getStatus();
         int statusColor;
-        switch (statusText != null ? statusText : "") {
-            case "运行中": statusColor = ContextCompat.getColor(context, R.color.status_running); break;
-            case "已停止": case "启动失败": statusColor = ContextCompat.getColor(context, R.color.status_stopped); break;
-            case "已禁用": statusColor = ContextCompat.getColor(context, R.color.status_disabled); break;
-            case "正在启动...": case "正在暂停...": case "正在重启...": case "操作中...": statusColor = ContextCompat.getColor(context, R.color.status_pending); break;
-            default: statusColor = ContextCompat.getColor(context, R.color.status_disabled); break;
+        if (statusText.startsWith("运行中")) {
+            statusColor = ContextCompat.getColor(context, R.color.status_running);
+        } else {
+            switch (statusText) {
+                case "已停止": case "启动失败": statusColor = ContextCompat.getColor(context, R.color.status_stopped); break;
+                case "已禁用": statusColor = ContextCompat.getColor(context, R.color.status_disabled); break;
+                case "正在启动...": case "正在暂停...": case "正在重启...": case "操作中...": statusColor = ContextCompat.getColor(context, R.color.status_pending); break;
+                default: statusColor = ContextCompat.getColor(context, R.color.status_disabled); break;
+            }
         }
         if (profile.isModified()) {
             statusText += " / 待应用";
             statusColor = ContextCompat.getColor(context, R.color.status_pending);
-            holder.itemView.setBackgroundColor(ContextCompat.getColor(context, R.color.pending_changes_background));
-        } else {
-            holder.itemView.setBackgroundColor(Color.TRANSPARENT);
         }
+        int cardBackground = ContextCompat.getColor(context,
+            profile.isModified() ? R.color.pending_changes_background : R.color.default_item_background);
+        int strokeColor = ContextCompat.getColor(context, R.color.app_outline_variant);
+        if (isSelectionMode && profile.isSelected()) {
+            cardBackground = ContextCompat.getColor(context, R.color.selection_background);
+            strokeColor = ContextCompat.getColor(context, R.color.brand_primary);
+        }
+        holder.cardView.setCardBackgroundColor(cardBackground);
+        holder.cardView.setStrokeColor(strokeColor);
+        holder.cardView.setStrokeWidth((int) (context.getResources().getDisplayMetrics().density
+            * (isSelectionMode && profile.isSelected() ? 2f : 1f)));
+        holder.statusIndicator.setBackgroundColor(statusColor);
         holder.tvStatus.setText(statusText);
         holder.tvStatus.setTextColor(statusColor);
         String firewallStatus = profile.getFirewallStatus();
-        if (firewallStatus != null && !firewallStatus.isEmpty()) {
-            holder.tvFirewallStatus.setVisibility(View.VISIBLE);
-            holder.tvFirewallStatus.setText("防火墙: " + firewallStatus);
-            if ("已放行".equals(firewallStatus)) {
-                holder.tvFirewallStatus.setTextColor(ContextCompat.getColor(context, R.color.status_running));
-            } else {
-                holder.tvFirewallStatus.setTextColor(ContextCompat.getColor(context, R.color.status_stopped));
-            }
-        } else {
-            holder.tvFirewallStatus.setVisibility(View.GONE);
+        if (firewallStatus == null || firewallStatus.trim().isEmpty()) {
+            firewallStatus = FrpProfile.FIREWALL_UNKNOWN;
         }
+        int firewallColor;
+        if (FrpProfile.FIREWALL_ALLOWED.equals(firewallStatus)) {
+            firewallColor = ContextCompat.getColor(context, R.color.status_running);
+        } else if (FrpProfile.FIREWALL_NOT_ALLOWED.equals(firewallStatus)) {
+            firewallColor = ContextCompat.getColor(context, R.color.status_stopped);
+        } else if (FrpProfile.FIREWALL_PENDING.equals(firewallStatus)) {
+            firewallColor = ContextCompat.getColor(context, R.color.status_pending);
+        } else {
+            firewallColor = ContextCompat.getColor(context, R.color.status_disabled);
+        }
+        holder.tvFirewallStatus.setVisibility(View.VISIBLE);
+        holder.tvFirewallStatus.setText("防火墙  " + firewallStatus);
+        holder.tvFirewallStatus.setTextColor(firewallColor);
+        TextViewCompat.setCompoundDrawableTintList(holder.tvFirewallStatus, ColorStateList.valueOf(firewallColor));
 
         holder.itemView.setOnClickListener(v -> {
             int currentPosition = holder.getAdapterPosition();
@@ -176,16 +197,20 @@ public class FrpProfileAdapter extends RecyclerView.Adapter<FrpProfileAdapter.Pr
         Map<String, Boolean> selectionState = new HashMap<>();
         for (FrpProfile profile : profiles) {
             if (profile.getProtocol() != null) {
-                String key = profile.getRemotePort() + "/" + profile.getProtocol().toLowerCase();
+                String key = profile.getRemotePort() + "/" + profile.getProtocol().toLowerCase(Locale.US);
                 selectionState.put(key, profile.isSelected());
             }
         }
         return selectionState;
     }
     static class ProfileViewHolder extends RecyclerView.ViewHolder {
+        MaterialCardView cardView;
+        View statusIndicator;
         CheckBox checkBox; TextView tvRemotePort, tvProtocol, tvStatus, tvMapping, tvTag, tvProxyProtocol, tvFirewallStatus;
         public ProfileViewHolder(@NonNull View itemView) {
             super(itemView);
+            cardView = (MaterialCardView) itemView;
+            statusIndicator = itemView.findViewById(R.id.status_indicator);
             checkBox = itemView.findViewById(R.id.checkbox_select); tvRemotePort = itemView.findViewById(R.id.tv_remote_port); tvProtocol = itemView.findViewById(R.id.tv_protocol); tvStatus = itemView.findViewById(R.id.tv_status); tvMapping = itemView.findViewById(R.id.tv_mapping); tvTag = itemView.findViewById(R.id.tv_tag); tvProxyProtocol = itemView.findViewById(R.id.tv_proxy_protocol); tvFirewallStatus = itemView.findViewById(R.id.tv_firewall_status);
         }
     }

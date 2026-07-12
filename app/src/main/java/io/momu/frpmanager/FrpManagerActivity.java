@@ -21,8 +21,10 @@ import com.google.android.material.chip.*;
 import com.google.android.material.dialog.*;
 import com.google.android.material.floatingactionbutton.*;
 import com.google.android.material.materialswitch.*;
+import com.google.android.material.progressindicator.*;
 import com.google.android.material.textfield.*;
 import io.momu.frpmanager.manager.data.FrpManagerRepository;
+import io.momu.frpmanager.manager.data.LifecycleFirewallPlan;
 import io.momu.frpmanager.manager.model.ApplyChangesResult;
 import io.momu.frpmanager.manager.model.BatchOperationBlock;
 import io.momu.frpmanager.manager.model.BatchOperationResult;
@@ -54,6 +56,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 	private LinearLayout batchActionsLayout;
 	private Button btnCancelSelection, btnConfirmDelete;
 	private TextView emptyViewText;
+	private LinearProgressIndicator syncProgress;
 
 	private Chip chipFilterStatus;
 	private ChipGroup chipGroupStatusFilter;
@@ -71,6 +74,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 	private boolean isInSelectionMode = false;
 
 	private SshManager sshManager;
+	private SshManager frpsFirewallSshManager;
 	private SshSettingsManager settingsManager;
 	private FrpManagerRepository repository;
 	private FirewallManager firewallManager;
@@ -82,8 +86,6 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 
 	private Handler autoRefreshHandler = new Handler(Looper.getMainLooper());
 	private Runnable autoRefreshRunnable;
-	private Dialog loadingDialog;
-
 	private final Set<String> lockedProfiles = Collections.synchronizedSet(new HashSet<>());
 	private final FrpFilterState filterState = new FrpFilterState();
 
@@ -99,21 +101,24 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 		setContentView(R.layout.activity_frp_manager);
 
 		settingsManager = new SshSettingsManager(this);
+		pendingChangesProfiles = PendingChangesStore.load(this);
 		if (settingsManager.isConfigured()) {
 			if (settingsManager.getUseKeyAuth()) {
 				sshManager = new SshManager(
 					settingsManager.getHost(),
 					settingsManager.getPort(),
-					settingsManager.getUsername(),
-					settingsManager.getPrivateKey(),
-					settingsManager.getPassphrase()
+						settingsManager.getUsername(),
+						settingsManager.getPrivateKey(),
+						settingsManager.getPassphrase(),
+						settingsManager.getHostKeyFingerprint(settingsManager.getHost(), settingsManager.getPort())
 				);
 			} else {
-				sshManager = new SshManager(
+				sshManager = SshManager.password(
 					settingsManager.getHost(),
 					settingsManager.getPort(),
-					settingsManager.getUsername(),
-					settingsManager.getPassword()
+						settingsManager.getUsername(),
+						settingsManager.getPassword(),
+						settingsManager.getHostKeyFingerprint(settingsManager.getHost(), settingsManager.getPort())
 				);
 			}
 		} else {
@@ -121,11 +126,11 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 			finish();
 			return;
 		}
-		repository = new FrpManagerRepository(sshManager, settingsManager);
+		initializeFirewallSshManager();
 
 		initViews();
 		setupRecyclerView();
-		showLoadingDialog();
+		showSyncIndicator();
 		detectFirewallAndLoadProfiles();
 
 		getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
@@ -158,39 +163,71 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 	}
 
 	@Override
+	protected void onStart() {
+		super.onStart();
+		if (autoRefreshRunnable != null) autoRefreshHandler.post(autoRefreshRunnable);
+	}
+
+	@Override
+	protected void onStop() {
+		autoRefreshHandler.removeCallbacks(autoRefreshRunnable);
+		super.onStop();
+	}
+
+	@Override
 	protected void onDestroy() {
 		super.onDestroy();
 		autoRefreshHandler.removeCallbacks(autoRefreshRunnable);
-		executor.execute(() -> {
+			executor.execute(() -> {
 			try {
-				if (sshManager != null) {
-					sshManager.disconnect();
-				}
+					if (sshManager != null) {
+						sshManager.disconnect();
+					}
+					if (frpsFirewallSshManager != null && frpsFirewallSshManager != sshManager) {
+						frpsFirewallSshManager.disconnect();
+					}
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
 		});
 	}
 
-	private void showLoadingDialog() {
-		if (loadingDialog == null) {
-			MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this);
-			LayoutInflater inflater = LayoutInflater.from(this);
-			View loadingView = inflater.inflate(R.layout.dialog_loading, null);
-			builder.setView(loadingView);
-			builder.setCancelable(false);
-			loadingDialog = builder.create();
-		}
-
-		if (!isFinishing() && !loadingDialog.isShowing()) {
-			loadingDialog.show();
-		}
+	private void showSyncIndicator() {
+		if (syncProgress == null) return;
+		syncProgress.animate().cancel();
+		syncProgress.setAlpha(1f);
+		syncProgress.setVisibility(View.VISIBLE);
 	}
 
-	private void hideLoadingDialog() {
-		if (loadingDialog != null && loadingDialog.isShowing()) {
-			loadingDialog.dismiss();
+	private void hideSyncIndicator() {
+		if (syncProgress == null || syncProgress.getVisibility() != View.VISIBLE) return;
+		syncProgress.animate().alpha(0f).setDuration(180L).withEndAction(() -> {
+			syncProgress.setVisibility(View.GONE);
+			syncProgress.setAlpha(1f);
+		}).start();
+	}
+
+	private void initializeFirewallSshManager() {
+		frpsFirewallSshManager = null;
+		if (settingsManager.isFirewallManaged()) {
+			String firewallHost = settingsManager.getFirewallHost();
+			int firewallPort = settingsManager.getFirewallPort();
+			if (sameSshEndpoint(settingsManager.getHost(), settingsManager.getPort(), firewallHost, firewallPort)) {
+				frpsFirewallSshManager = sshManager;
+			} else if (!firewallHost.isEmpty()) {
+				String fingerprint = settingsManager.getHostKeyFingerprint(firewallHost, firewallPort);
+				frpsFirewallSshManager = settingsManager.getUseKeyAuth()
+					? new SshManager(firewallHost, firewallPort, settingsManager.getUsername(), settingsManager.getPrivateKey(),
+						settingsManager.getPassphrase(), fingerprint)
+					: SshManager.password(firewallHost, firewallPort, settingsManager.getUsername(), settingsManager.getPassword(), fingerprint);
+			}
 		}
+		repository = new FrpManagerRepository(sshManager, frpsFirewallSshManager, settingsManager);
+	}
+
+	private boolean sameSshEndpoint(String firstHost, int firstPort, String secondHost, int secondPort) {
+		return firstHost != null && secondHost != null && firstPort == secondPort
+			&& firstHost.trim().equalsIgnoreCase(secondHost.trim());
 	}
 
 	private void detectFirewallAndLoadProfiles() {
@@ -208,6 +245,13 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 					loadFrpProfilesFromServer();
 				});
 
+			} catch (SshManager.HostKeyVerificationException e) {
+				String firewallHost = settingsManager.getFirewallHost();
+				int firewallPort = settingsManager.getFirewallPort();
+				runOnUiThread(() -> {
+					showFirewallHostKeyDialog(firewallHost, firewallPort, e);
+					loadFrpProfilesFromServer();
+				});
 			} catch (IOException e) {
 				runOnUiThread(() -> {
 					Toast.makeText(this, "防火墙检索失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
@@ -215,6 +259,22 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 				});
 			}
 		});
+	}
+
+	private void showFirewallHostKeyDialog(String host, int port, SshManager.HostKeyVerificationException exception) {
+		String prior = exception.getExpectedFingerprint() == null ? "（首次连接）" : exception.getExpectedFingerprint();
+		new MaterialAlertDialogBuilder(this)
+			.setTitle(exception.getExpectedFingerprint() == null ? "确认防火墙 SSH 主机指纹" : "防火墙 SSH 主机密钥已变更")
+			.setMessage("主机: " + host + ":" + port + "\n\n已保存指纹: " + prior
+				+ "\n新指纹: " + exception.getFingerprint()
+				+ "\n\n确认后将立即启用防火墙控制。")
+			.setNegativeButton("取消", null)
+			.setPositiveButton("确认并启用", (dialog, which) -> {
+				settingsManager.trustHostKeyFingerprint(host, port, exception.getFingerprint());
+				initializeFirewallSshManager();
+				detectFirewallAndLoadProfiles();
+			})
+			.show();
 	}
 
 	private void initViews() {
@@ -233,6 +293,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 		btnBatchStart = findViewById(R.id.btn_batch_start);
 		btnBatchStop = findViewById(R.id.btn_batch_stop);
 		emptyViewText = findViewById(R.id.empty_view_text);
+		syncProgress = findViewById(R.id.manager_sync_progress);
 		btnBatchFirewallAllow = findViewById(R.id.btn_batch_firewall_allow);
 		btnBatchFirewallBlock = findViewById(R.id.btn_batch_firewall_block);
 
@@ -316,7 +377,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 		btnBatchStart.setOnClickListener(v -> {
 			List<FrpProfile> selectedItems = adapter.getSelectedItems();
 			List<FrpProfile> itemsToStart = selectedItems.stream()
-				.filter(p -> !"运行中".equals(p.getStatus()) && !p.isModified()).collect(Collectors.toList());
+				.filter(p -> !"运行中".equals(p.getStatus()) && canOperateRemotely(p)).collect(Collectors.toList());
 			if (!itemsToStart.isEmpty()) {
 				confirmAndExecuteBatchOperation("start", itemsToStart);
 			} else {
@@ -327,7 +388,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 		btnBatchStop.setOnClickListener(v -> {
 			List<FrpProfile> selectedItems = adapter.getSelectedItems();
 			List<FrpProfile> itemsToStop = selectedItems.stream()
-				.filter(p -> "运行中".equals(p.getStatus()) && !p.isModified()).collect(Collectors.toList());
+				.filter(p -> p.getStatus().startsWith("运行中") && canOperateRemotely(p)).collect(Collectors.toList());
 			if (!itemsToStop.isEmpty()) {
 				confirmAndExecuteBatchOperation("stop", itemsToStop);
 			} else {
@@ -397,6 +458,11 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 		adapter = new FrpProfileAdapter(this);
 		recyclerView.setLayoutManager(new LinearLayoutManager(this));
 		recyclerView.setAdapter(adapter);
+		if (recyclerView.getItemAnimator() != null) {
+			recyclerView.getItemAnimator().setAddDuration(280L);
+			recyclerView.getItemAnimator().setMoveDuration(260L);
+			recyclerView.getItemAnimator().setChangeDuration(220L);
+		}
 
 		recyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
 				@Override
@@ -445,7 +511,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 	@Override
 	public boolean onPrepareOptionsMenu(Menu menu) {
 		boolean isVisible = !isInSelectionMode;
-		boolean isFirewallReady = firewallManager != null && settingsManager.isFirewallManaged();
+		boolean isFirewallReady = isFirewallReady();
 
 		applyChangesMenuItem.setVisible(isVisible && !pendingChangesProfiles.isEmpty());
 		searchMenuItem.setVisible(true);
@@ -507,7 +573,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 			getOnBackPressedDispatcher().onBackPressed();
 			return true;
 		} else if (itemId == R.id.action_refresh) {
-			showLoadingDialog();
+			showSyncIndicator();
 			loadFrpProfilesFromServer();
 			return true;
 		} else if (itemId == R.id.action_batch_create) {
@@ -603,10 +669,27 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 				.show();
 			return;
 		}
+		if (!canOperateRemotely(profile)) {
+			String localFrpsSafetyError = profile.getManagedLocalFrpsSafetyError();
+			if (localFrpsSafetyError != null) {
+				new MaterialAlertDialogBuilder(this).setTitle("需要调整远程端口")
+					.setMessage(localFrpsSafetyError + "\n\n可以直接编辑远程端口。应用更改时软件会停止旧实例、迁移配置并清理旧防火墙规则。")
+					.setPositiveButton("编辑远程端口", (d, w) -> showAddOrEditDialog(profile))
+					.setNeutralButton("查看原配置", (d, w) -> showConfigFileDialog(profile))
+					.setNegativeButton("删除此项", (d, w) ->
+						confirmAndExecuteBatchOperation("delete", Collections.singletonList(profile))).show();
+				return;
+			}
+			new MaterialAlertDialogBuilder(this).setTitle("已阻止不安全操作")
+				.setMessage(profile.getLastError() == null ? "此配置缺少可验证的远端资源标识。" : profile.getLastError())
+				.setPositiveButton("查看原配置", (d, w) -> showConfigFileDialog(profile)).setNegativeButton("关闭", null).show();
+			return;
+		}
 
 		List<String> itemsList = new ArrayList<>();
 		switch (profile.getStatus()) {
 			case "运行中" :
+			case "运行中 (注册未验证)" :
 				itemsList.add("暂停此项映射");
 				itemsList.add("重启此项服务");
 				break;
@@ -615,6 +698,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 				itemsList.add("启动此项映射");
 				break;
 			case "已禁用" :
+			case "已禁用（配置文件已禁用）" :
 				itemsList.add("启用并启动");
 				break;
 			default :
@@ -676,9 +760,9 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 			btnConfirmDelete.setEnabled(selectedCount > 0);
 
 			List<FrpProfile> selectedItems = adapter.getSelectedItems();
-			long startableCount = selectedItems.stream().filter(p -> !"运行中".equals(p.getStatus()) && !p.isModified())
+			long startableCount = selectedItems.stream().filter(p -> !p.getStatus().startsWith("运行中") && canOperateRemotely(p))
 			.count();
-			long stoppableCount = selectedItems.stream().filter(p -> "运行中".equals(p.getStatus()) && !p.isModified())
+			long stoppableCount = selectedItems.stream().filter(p -> p.getStatus().startsWith("运行中") && canOperateRemotely(p))
 			.count();
 
 			btnBatchStart.setText("启动已选 (" + startableCount + ")");
@@ -687,14 +771,14 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 			btnBatchStop.setText("暂停已选 (" + stoppableCount + ")");
 			btnBatchStop.setEnabled(stoppableCount > 0);
 
-			boolean isFirewallReady = firewallManager != null && settingsManager.isFirewallManaged()
+			boolean isFirewallReady = isFirewallReady()
 				&& selectedCount > 0;
 			if (btnBatchFirewallAllow != null) {
 				btnBatchFirewallAllow.setText("放行已选 (" + selectedCount + ")");
 				btnBatchFirewallAllow.setEnabled(isFirewallReady);
 			}
 			if (btnBatchFirewallBlock != null) {
-				btnBatchFirewallBlock.setText("阻止已选 (" + selectedCount + ")");
+			btnBatchFirewallBlock.setText("撤销已选放行 (" + selectedCount + ")");
 				btnBatchFirewallBlock.setEnabled(isFirewallReady);
 			}
 		}
@@ -742,14 +826,14 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 
 		if (existingProfile != null) {
 			dialogTitle.setText("编辑端口映射");
-			serverAddrInput.setText(existingProfile.getServerAddr());
-			serverPortInput.setText(
-				existingProfile.getServerPort() > 0 ? String.valueOf(existingProfile.getServerPort()) : "");
-			tokenInput.setText(existingProfile.getToken());
+			boolean managedMode = settingsManager.isEmbeddedFrpsManaged();
+			serverAddrInput.setText(managedMode ? "127.0.0.1" : existingProfile.getServerAddr());
+			serverPortInput.setText(String.valueOf(managedMode ? 7000 : existingProfile.getServerPort()));
+			tokenInput.setText(managedMode ? settingsManager.getFrpToken() : existingProfile.getToken());
 
 			remotePortInput.setText(String.valueOf(existingProfile.getRemotePort()));
-			remotePortInput.setEnabled(false);
-			remotePortLayout.setHelperText("编辑模式下远程端口不可更改");
+			remotePortInput.setEnabled(true);
+			remotePortLayout.setHelperText("修改后会停止旧实例，并原子迁移配置、服务和旧防火墙规则");
 			localIpInput.setText(existingProfile.getLocalIp());
 			localPortInput.setText(String.valueOf(existingProfile.getLocalPort()));
 			tagInput.setText(existingProfile.getTag());
@@ -789,9 +873,12 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 			proxyVersionSpinner.setVisibility(View.GONE);
 		}
 
-		new MaterialAlertDialogBuilder(this).setView(dialogView).setPositiveButton("保存", (dialog, which) -> {
+		final AlertDialog profileDialog = new MaterialAlertDialogBuilder(this).setView(dialogView)
+			.setPositiveButton("保存", null).setNegativeButton("取消", null).create();
+		profileDialog.setOnShowListener(ignored -> profileDialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
 			String serverAddr = serverAddrInput.getText().toString().trim();
-			if (serverAddr.isEmpty() || (!isValidIpAddress(serverAddr) && !isValidDomain(serverAddr))) {
+			if (serverAddr.isEmpty() || (!isValidIpAddress(serverAddr) && !isValidDomain(serverAddr)
+				&& !FrpProfile.isLoopbackAddress(serverAddr))) {
 				Toast.makeText(FrpManagerActivity.this, "FRP 服务器地址不能为空或格式不正确", Toast.LENGTH_SHORT).show();
 				return;
 			}
@@ -805,6 +892,11 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 				return;
 			}
 			String token = tokenInput.getText().toString().trim();
+			String enteredTag = tagInput.getText().toString();
+			if (containsControlCharacters(token) || containsControlCharacters(enteredTag)) {
+				Toast.makeText(FrpManagerActivity.this, "Token 和备注不能包含换行或控制字符", Toast.LENGTH_SHORT).show();
+				return;
+			}
 
 			String remotePortStr = remotePortInput.getText().toString();
 			if (TextUtils.isEmpty(remotePortStr)) {
@@ -842,6 +934,12 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 				Toast.makeText(FrpManagerActivity.this, "本地端口号无效", Toast.LENGTH_SHORT).show();
 				return;
 			}
+			String localFrpsSafetyError = FrpProfile.localFrpsSafetyError(serverAddr, serverPort,
+				localIp, localPort, remotePort);
+			if (localFrpsSafetyError != null) {
+				Toast.makeText(FrpManagerActivity.this, localFrpsSafetyError, Toast.LENGTH_LONG).show();
+				return;
+			}
 			boolean isTcpChecked = tcpCheckbox.isChecked();
 			boolean isUdpChecked = udpCheckbox.isChecked();
 
@@ -856,7 +954,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 
 				boolean tcpExists = existingProfileKeys.contains(FrpProfileKey.from(remotePort, "tcp"));
 				boolean udpExists = existingProfileKeys.contains(FrpProfileKey.from(remotePort, "udp"));
-				final String tag = tagInput.getText().toString();
+				final String tag = enteredTag;
 				final String proxyVersion = proxySwitch.isChecked()
 					? (String) proxyVersionSpinner.getSelectedItem()
 					: null;
@@ -910,21 +1008,33 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 					addProfileToPendingList(udpProfile, true);
 				}
 			} else {
+				String newProfileKey = FrpProfileKey.from(remotePort, existingProfile.getProtocol());
+				boolean conflictsWithAnotherProfile = allProfiles.stream()
+					.anyMatch(profile -> newProfileKey.equals(FrpProfileKey.from(profile))
+						&& !profilesReferToSameResource(profile, existingProfile));
+				if (conflictsWithAnotherProfile) {
+					Toast.makeText(this, "远程端口 " + remotePort + "/" + existingProfile.getProtocol().toUpperCase(Locale.US)
+						+ " 已存在，无法迁移。", Toast.LENGTH_LONG).show();
+					return;
+				}
 				FrpProfile newProfile = createProfileFromInputs(serverAddr, serverPort, token,
-																existingProfile.getRemotePort(), localIp, localPort, tagInput.getText().toString(),
-																existingProfile.getProtocol(),
+									remotePort, localIp, localPort, enteredTag,
+														existingProfile.getProtocol(),
 																proxySwitch.isChecked() ? (String) proxyVersionSpinner.getSelectedItem() : null);
-				newProfile.setStatus(existingProfile.getStatus());
-				newProfile.setModified(true);
+					newProfile.setStatus(existingProfile.getStatus());
+					newProfile.setModified(true);
+					newProfile.copyRemoteIdentityFrom(existingProfile);
 
 				if (newProfile.hasFunctionalChanges(existingProfile)) {
 					showSaveAndRestartDialog(newProfile, existingProfile.getStatus());
 				} else {
-					applySingleProfileChange(newProfile, false);
-					Toast.makeText(FrpManagerActivity.this, "备注已更新", Toast.LENGTH_SHORT).show();
+					addProfileToPendingList(newProfile, false);
+					Toast.makeText(FrpManagerActivity.this, "备注修改已暂存；请应用更改。", Toast.LENGTH_SHORT).show();
 				}
 			}
-		}).setNegativeButton("取消", null).show();
+			profileDialog.dismiss();
+		}));
+		profileDialog.show();
 	}
 
 	private FrpProfile createProfileFromInputs(String serverAddr, int serverPort, String token, int remotePort,
@@ -963,8 +1073,15 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 		return pattern.matcher(domain).matches();
 	}
 
+	private boolean containsControlCharacters(String value) {
+		return value != null && value.matches(".*[\\r\\n\\u0000].*");
+	}
+
 	private void showSaveAndRestartDialog(FrpProfile profile, String currentStatus) {
-		String message = "配置已修改。是否立即将新配置应用到服务器？\n\n注意：应用后需要您手动重启或启动此项服务才能使新配置生效。";
+		String message = profile.hasPersistedIdentityChange()
+			? "将把远程端口从 " + profile.getPersistedRemotePort() + " 迁移到 " + profile.getRemotePort()
+				+ "。\n\n应用时会停止旧实例、验证新配置、删除旧配置并清理旧防火墙规则。迁移完成后请启动新端口。"
+			: "配置已修改。是否立即将新配置应用到服务器？\n\n应用后需要手动重启或启动此项服务才能使新配置生效。";
 		new MaterialAlertDialogBuilder(this).setTitle("应用配置").setMessage(message).setPositiveButton("立即应用", (d, w) -> {
 			applySingleProfileChange(profile, false);
 		}).setNeutralButton("暂存更改", (d, w) -> addProfileToPendingList(profile, false)).setNegativeButton("取消", null)
@@ -974,29 +1091,45 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 	private void addProfileToPendingList(FrpProfile profileToAdd, boolean isNew) {
 		profileToAdd.setModified(true);
 
-		pendingChangesProfiles.removeIf(p -> p.getRemotePort() == profileToAdd.getRemotePort()
-			&& p.getProtocol().equalsIgnoreCase(profileToAdd.getProtocol()));
+		pendingChangesProfiles.removeIf(profile -> profilesReferToSameResource(profile, profileToAdd));
 		pendingChangesProfiles.add(profileToAdd);
+		PendingChangesStore.save(this, pendingChangesProfiles);
 
-		int existingIndex = -1;
-		for (int i = 0; i < allProfiles.size(); i++) {
-			if (allProfiles.get(i).getRemotePort() == profileToAdd.getRemotePort()
-				&& allProfiles.get(i).getProtocol().equalsIgnoreCase(profileToAdd.getProtocol())) {
-				existingIndex = i;
-				break;
-			}
-		}
-
-		if (existingIndex != -1) {
-			allProfiles.set(existingIndex, profileToAdd);
-		} else {
-			allProfiles.add(profileToAdd);
-		}
+		allProfiles.removeIf(profile -> profilesReferToSameResource(profile, profileToAdd));
+		allProfiles.add(profileToAdd);
 
 		Collections.sort(allProfiles,
 						 Comparator.comparingInt(FrpProfile::getRemotePort).thenComparing(FrpProfile::getProtocol));
 		applyFilters();
 		updatePendingChangesMenu();
+	}
+
+	private boolean profilesReferToSameResource(FrpProfile first, FrpProfile second) {
+		if (first == null || second == null) return false;
+		String firstPath = first.getSourcePath();
+		String secondPath = second.getSourcePath();
+		if (firstPath != null && !firstPath.trim().isEmpty() && firstPath.equals(secondPath)) return true;
+		Set<String> firstKeys = profileIdentityKeys(first);
+		Set<String> secondKeys = profileIdentityKeys(second);
+		return firstKeys.stream().anyMatch(secondKeys::contains);
+	}
+
+	private Set<String> profileIdentityKeys(FrpProfile profile) {
+		Set<String> keys = new HashSet<>();
+		if (profile == null) return keys;
+		String current = FrpProfileKey.from(profile);
+		if (!current.isEmpty()) keys.add(current);
+		String persisted = profile.getPersistedIdentityKey();
+		if (!persisted.isEmpty()) keys.add(persisted);
+		return keys;
+	}
+
+	private FrpProfile persistedFirewallIdentity(FrpProfile profile) {
+		if (profile == null || !profile.hasPersistedIdentity()) return profile;
+		FrpProfile persisted = new FrpProfile();
+		persisted.setRemotePort(profile.getPersistedRemotePort());
+		persisted.setProtocol(profile.getPersistedProtocol());
+		return persisted;
 	}
 
 	private void applySingleProfileChange(final FrpProfile profile, final boolean restart) {
@@ -1006,25 +1139,31 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 			false
 		);
 
-		lockedProfiles.add(FrpProfileKey.from(profile));
+		lockedProfiles.addAll(profileIdentityKeys(profile));
 
 		executor.execute(() -> {
 			boolean hasError = false;
 			try {
 				logDialog.append("准备为端口 " + getProfileDisplayName(profile) + " 应用更改...", "info");
 				logDialog.append("------------------------------------------", "info");
-				if (isFirewallReady()) {
-					logDialog.append("[防火墙日志] 检测到已启用防火墙联动。", "info");
-				}
+					if (isFirewallReady()) {
+						logDialog.append("[防火墙日志] 当前只写入配置；仅在代理启动并确认注册成功后自动放行。", "info");
+					}
 
-				CommandExecutionResult result = repository.applySingleProfileChange(profile, restart, firewallManager);
+					CommandExecutionResult result = repository.applySingleProfileChange(profile, restart, firewallManager);
 				logDialog.append("------------------------------------------", "info");
-				logDialog.append("最终执行命令:\n" + result.getCommand(), "info");
+					logDialog.append("执行操作: " + result.getCommand(), "info");
 				logDialog.append("------------------------------------------", "info");
-				appendCommandOutput(logDialog, result);
-
-				pendingChangesProfiles.removeIf(p -> FrpProfileKey.from(p).equals(FrpProfileKey.from(profile)));
-				logDialog.append("\n更改已应用成功！", "success");
+					appendCommandOutput(logDialog, result);
+					if (profile.hasPersistedIdentityChange() && isFirewallReady()) {
+						logDialog.append("正在撤销旧远程端口的本工具防火墙规则...", "info");
+						CommandExecutionResult firewallResult = repository.executeSingleFirewallOperation(
+							persistedFirewallIdentity(profile), "block", firewallManager);
+						appendCommandOutput(logDialog, firewallResult);
+					}
+					pendingChangesProfiles.removeIf(p -> profilesReferToSameResource(p, profile));
+					PendingChangesStore.save(this, pendingChangesProfiles);
+					logDialog.append("\n更改已应用成功！", "success");
 				if (!restart) {
 					logDialog.append("请手动重启服务以使新配置生效。", "success");
 				}
@@ -1033,7 +1172,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 				logDialog.append("\n\n###### 操作失败! ######", "error");
 				logDialog.append("错误详情: " + e.getMessage(), "error");
 			} finally {
-				lockedProfiles.remove(FrpProfileKey.from(profile));
+					lockedProfiles.removeAll(profileIdentityKeys(profile));
 				boolean finalHasError = hasError;
 				runOnUiThread(() -> {
 					logDialog.setTitle("操作完成");
@@ -1049,8 +1188,12 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 	}
 
 	private void appendCommandOutput(OperationLogDialog logDialog, CommandExecutionResult result) {
-		logDialog.append("\n服务器返回信息:", "success");
-		logDialog.append(result.getOutput().isEmpty() ? "(无输出)" : result.getOutput(), "success");
+		logDialog.append("\n服务器返回信息:", result.isSuccessful() ? "success" : "error");
+		logDialog.append(result.getOutput().isEmpty() ? "(无输出)" : SensitiveDataRedactor.redact(result.getOutput()),
+			result.isSuccessful() ? "success" : "error");
+		if (!result.getErrorOutput().trim().isEmpty()) {
+			logDialog.append("错误输出:\n" + SensitiveDataRedactor.redact(result.getErrorOutput()), "error");
+		}
 	}
 
 	private void appendBatchOperationLogs(OperationLogDialog logDialog, BatchOperationResult result) {
@@ -1062,7 +1205,8 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 		if (result.getBlocks().isEmpty()) {
 			logDialog.append(result.getOutput().isEmpty() ? "(无输出)" : result.getOutput(), "info");
 		}
-		logDialog.append("\n--- 执行完毕 ---", "success");
+		if (result.isSuccessful()) logDialog.append("\n--- 执行完毕 ---", "success");
+		else logDialog.append("\n--- 远端操作部分或全部失败；未将失败项标记为成功 ---", "error");
 	}
 
 	private void applyBatchOperationStatuses(String operationType, BatchOperationResult result) {
@@ -1086,11 +1230,12 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 					profileToUpdate.setStatus("运行中");
 					break;
 				case WARNING:
-					profileToUpdate.setStatus("运行中 (有警告)");
+					profileToUpdate.setStatus("运行中 (注册未验证)");
+					profileToUpdate.setProxyRegistrationState("未验证");
 					break;
 				case ERROR:
 					profileToUpdate.setStatus("启动失败");
-					showStartFailureDialog(profileToUpdate);
+						showStartFailureDialog(profileToUpdate, findOperationBlock(result, profileKey));
 					break;
 				case UNKNOWN:
 				default:
@@ -1099,12 +1244,96 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 		}
 	}
 
-	private void showStartFailureDialog(FrpProfile profile) {
+	private BatchOperationBlock findOperationBlock(BatchOperationResult result, String profileKey) {
+		for (BatchOperationBlock block : result.getBlocks()) {
+			if (profileKey.equals(block.getProfileKey())) return block;
+		}
+		return null;
+	}
+
+	private void showStartFailureDialog(FrpProfile profile, BatchOperationBlock block) {
+		String reason = block == null ? null : block.getReason();
+		if (reason == null && block != null) reason = inferStartFailureReason(block.getContent());
+		String serverAddr;
+		int serverPort;
+		if (settingsManager.isEmbeddedFrpsManaged()) {
+			serverAddr = "127.0.0.1";
+			serverPort = 7000;
+		} else {
+			serverAddr = profile.getServerAddr();
+			if (serverAddr == null || serverAddr.trim().isEmpty()) serverAddr = settingsManager.getFrpServerAddr();
+			serverPort = profile.getServerPort() > 0 ? profile.getServerPort() : settingsManager.getFrpServerPort();
+		}
+		String endpoint = serverAddr + ":" + serverPort;
+		String title;
+		String detail;
+		if ("MANAGED_ENVIRONMENT_INVALID".equals(reason)) {
+			title = "受管 FRP 环境不完整";
+			detail = "软件没有找到自己部署的 frps.service 或 frps.toml。请回到首页重新执行一次内置 FRP 部署，软件不会覆盖不属于本工具的服务。";
+		} else if ("MANAGED_FRPS_START_FAILED".equals(reason)) {
+			title = "受管 frps 自动启动失败";
+			detail = "软件已经尝试自动启动 frps.service，但服务未能保持运行。请查看 frps.service 日志，或重新执行内置 FRP 部署进行修复。";
+		} else if ("CONFIG_REPAIR_FAILED".equals(reason)) {
+			title = "旧端点配置修复失败";
+			detail = "软件无法把旧配置安全迁移到 127.0.0.1:7000，因此保持服务关闭。请重新部署环境，或打开此端口配置后重新保存。";
+		} else if ("FRPS_UNREACHABLE".equals(reason)) {
+			title = "FRP 服务端不可达";
+			detail = "目标 frps 端点 " + endpoint + " 不可达。使用一键托管模式时请重新执行环境修复并检查 "
+				+ "frps.service；使用外部模式时请核对外部 frps 地址、端口及运行状态。";
+		} else if ("AUTHENTICATION_FAILED".equals(reason)) {
+			title = "FRP 鉴权失败";
+			detail = "frps 已拒绝登录，请确认客户端与服务端配置了相同的鉴权 token。";
+		} else if ("REMOTE_PORT_CONFLICT".equals(reason)) {
+			title = "远端端口冲突";
+			detail = "远端端口已被占用或同名代理已存在，请更换端口或清理 frps 上的冲突代理。";
+		} else if ("CONFIG_INVALID".equals(reason)) {
+			title = "FRP 配置无效";
+			detail = "配置文件不存在或未通过 frpc 校验；服务已保持关闭，请修正配置后重试。";
+		} else if ("LOCAL_PORT_LOOP".equals(reason)) {
+			title = "同机端口回环已阻止";
+			detail = "受管 frps 与 frpc 在同一台主机上运行，本地端口不能与远程端口相同。通常应保留真实服务的本地端口，并把远程端口改为其他未占用端口。";
+		} else if ("MANAGED_CONTROL_PORT_CONFLICT".equals(reason)) {
+			title = "受管 frps 控制端口冲突";
+			detail = "当前映射会占用或暴露受管 frps 的本机控制端口。请避开该端口后重试。";
+		} else if ("PROXY_REGISTRATION_FAILED".equals(reason)) {
+			title = "代理注册失败";
+			detail = "frpc 已尝试连接，但代理未能注册。请检查远端端口、代理名称和 frps 策略。";
+		} else if ("ENDPOINT_CHECK_UNAVAILABLE".equals(reason)) {
+			title = "无法安全检查服务端";
+			detail = "远端主机缺少 bash 或 timeout，软件已拒绝盲目启动。请补齐基础命令后重试。";
+		} else {
+			title = "frpc 服务启动失败";
+			detail = "服务未能保持运行，已自动停止并禁用，避免持续重启。请查看本次执行日志定位具体原因。";
+		}
+		String finalTitle = title;
+		String finalDetail = detail;
 		runOnUiThread(() -> new MaterialAlertDialogBuilder(FrpManagerActivity.this)
-			.setTitle("进程启动失败或崩溃")
-			.setMessage("端口 " + getProfileDisplayName(profile) + " 的 frpc 服务未能成功启动，请检查日志获取详细错误信息。")
+			.setTitle(finalTitle)
+			.setMessage("端口 " + getProfileDisplayName(profile) + "：\n\n" + finalDetail
+				+ "\n\n防火墙不会为本次失败自动放行。")
 			.setPositiveButton("好的", null)
+			.setNegativeButton("编辑此端口配置", (dialog, which) -> showAddOrEditDialog(profile))
 			.show());
+	}
+
+	private String inferStartFailureReason(String content) {
+		String value = content == null ? "" : content.toLowerCase(Locale.US);
+		if (value.contains("connection refused") || value.contains("connect to server error")
+			|| value.contains("no route to host") || value.contains("network is unreachable")) {
+			return "FRPS_UNREACHABLE";
+		}
+		if (value.contains("authentication failed") || value.contains("unauthorized")
+			|| (value.contains("token") && (value.contains("invalid") || value.contains("mismatch")))) {
+			return "AUTHENTICATION_FAILED";
+		}
+		if (value.contains("remote port") && (value.contains("used") || value.contains("conflict"))) {
+			return "REMOTE_PORT_CONFLICT";
+		}
+		if (value.contains("配置校验失败") || value.contains("config invalid")) return "CONFIG_INVALID";
+		if (value.contains("proxy") && (value.contains("error") || value.contains("failed"))) {
+			return "PROXY_REGISTRATION_FAILED";
+		}
+		return null;
 	}
 
 	private String toLogType(PortExecutionStatus status) {
@@ -1126,7 +1355,43 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 	}
 
 	private boolean isFirewallReady() {
-		return firewallManager != null && settingsManager.isFirewallManaged();
+		return firewallManager != null && repository != null && repository.isFirewallManagementAvailable();
+	}
+
+	private void syncFirewallRules(OperationLogDialog logDialog, String operation, List<FrpProfile> profiles) throws IOException {
+		if (profiles == null || profiles.isEmpty() || !isFirewallReady()) return;
+		logDialog.append("[防火墙日志] 正在" + getOperationName(operation) + " " + profiles.size() + " 个 FRP 端口规则...", "info");
+		CommandExecutionResult result = repository.executeBatchFirewallOperation(operation, profiles, firewallManager);
+		appendCommandOutput(logDialog, result);
+	}
+
+	private void syncLifecycleFirewallRules(OperationLogDialog logDialog, String operationType,
+		BatchOperationResult result, List<FrpProfile> profiles) {
+		if (!isFirewallReady()) return;
+		LifecycleFirewallPlan plan = LifecycleFirewallPlan.from(
+			operationType, result.getStatusByProfileKey(), profiles);
+		if (!plan.getProfilesToBlock().isEmpty()) {
+			try {
+				List<FrpProfile> blockTargets = "delete".equals(operationType)
+					? plan.getProfilesToBlock().stream().map(this::persistedFirewallIdentity).collect(Collectors.toList())
+					: plan.getProfilesToBlock();
+				syncFirewallRules(logDialog, "block", blockTargets);
+			} catch (IOException exception) {
+				logDialog.append("[防火墙错误] FRP 原始结果已保留，但清理遗留放行规则失败："
+					+ exception.getMessage(), "error");
+			}
+		}
+		if (!plan.getProfilesToAllow().isEmpty()) {
+			try {
+				syncFirewallRules(logDialog, "allow", plan.getProfilesToAllow());
+			} catch (IOException exception) {
+				logDialog.append("[防火墙错误] 代理已注册，但自动放行失败：" + exception.getMessage(), "error");
+			}
+		}
+	}
+
+	private boolean canOperateRemotely(FrpProfile profile) {
+		return profile != null && profile.isPersisted() && !profile.isModified() && profile.getLastError() == null;
 	}
 
 	private void showBatchCreateDialog() {
@@ -1138,6 +1403,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 		final EditText tokenInput = dialogView.findViewById(R.id.edit_text_token);
 		final EditText remoteRangeInput = dialogView.findViewById(R.id.edit_text_remote_range);
 		final EditText localIpInput = dialogView.findViewById(R.id.edit_text_local_ip);
+		final EditText localRangeInput = dialogView.findViewById(R.id.edit_text_local_range);
 		final EditText tagInput = dialogView.findViewById(R.id.edit_text_tag);
 		final CheckBox tcpCheckbox = dialogView.findViewById(R.id.checkbox_tcp_batch);
 		final CheckBox udpCheckbox = dialogView.findViewById(R.id.checkbox_udp_batch);
@@ -1148,12 +1414,17 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 
 		tcpCheckbox.setChecked(true);
 		udpCheckbox.setChecked(false);
+		if (settingsManager.isEmbeddedFrpsManaged()) {
+			localRangeInput.setHint("本地端口范围 (必填，例如 7000-7010)");
+		}
 
-		new MaterialAlertDialogBuilder(this).setView(dialogView).setTitle("批量创建端口").setNegativeButton("取消", null)
-			.setPositiveButton("创建", (dialog, which) -> {
+		final AlertDialog batchCreateDialog = new MaterialAlertDialogBuilder(this).setView(dialogView).setTitle("批量创建端口")
+			.setNegativeButton("取消", null).setPositiveButton("创建", null).create();
+		batchCreateDialog.setOnShowListener(ignored -> batchCreateDialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
 			try {
 				String serverAddr = serverAddrInput.getText().toString().trim();
-				if (!isValidIpAddress(serverAddr) && !isValidDomain(serverAddr)) {
+				if (!isValidIpAddress(serverAddr) && !isValidDomain(serverAddr)
+					&& !FrpProfile.isLoopbackAddress(serverAddr)) {
 					throw new IllegalArgumentException("FRP 服务器地址格式不正确。");
 				}
 
@@ -1170,6 +1441,9 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 				String remoteRange = remoteRangeInput.getText().toString();
 				String localIp = localIpInput.getText().toString();
 				final String tagTemplate = tagInput.getText().toString().trim();
+				if (containsControlCharacters(token) || containsControlCharacters(tagTemplate)) {
+					throw new IllegalArgumentException("Token 和备注不能包含换行或控制字符。");
+				}
 
 				boolean isTcpChecked = tcpCheckbox.isChecked();
 				boolean isUdpChecked = udpCheckbox.isChecked();
@@ -1178,19 +1452,25 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 					throw new IllegalArgumentException("请至少选择一个协议 (TCP 或 UDP)。");
 				}
 
-				String[] parts = remoteRange.split("-");
-				if (parts.length != 2) {
-					throw new IllegalArgumentException("范围格式错误，应为 '开始-结束'");
-				}
-
-				int remoteStart = Integer.parseInt(parts[0].trim());
-				int remoteEnd = Integer.parseInt(parts[1].trim());
-
-				if (remoteStart <= 0 || remoteEnd > 65535 || remoteStart > remoteEnd) {
-					throw new IllegalArgumentException("端口范围无效，必须在 1-65535 之间，且开始端口需小于等于结束端口。");
-				}
+				int[] remotePorts = parsePortRange(remoteRange, "远程端口范围");
+				int remoteStart = remotePorts[0];
+				int remoteEnd = remotePorts[1];
 				if (remoteEnd - remoteStart + 1 > 1001) {
 					throw new IllegalArgumentException("单次创建范围不能超过1001个端口。");
+				}
+				int localStart = remoteStart;
+				int localEnd = remoteEnd;
+				String localRange = localRangeInput.getText().toString().trim();
+				if (FrpProfile.isLoopbackAddress(serverAddr) && localRange.isEmpty()) {
+					throw new IllegalArgumentException("受管同机模式必须填写与远程端口不同的本地端口范围。");
+				}
+				if (!localRange.isEmpty()) {
+					int[] localPorts = parsePortRange(localRange, "本地端口范围");
+					localStart = localPorts[0];
+					localEnd = localPorts[1];
+					if (localEnd - localStart != remoteEnd - remoteStart) {
+						throw new IllegalArgumentException("本地端口范围必须与远程端口范围包含相同数量的端口。");
+					}
 				}
 
 				if (!isValidIpAddress(localIp)) {
@@ -1202,13 +1482,19 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 				.collect(Collectors.toSet());
 
 				for (int port = remoteStart; port <= remoteEnd; port++) {
+					int localPort = localStart + (port - remoteStart);
+					String localFrpsSafetyError = FrpProfile.localFrpsSafetyError(serverAddr, serverPort,
+						localIp, localPort, port);
+					if (localFrpsSafetyError != null) {
+						throw new IllegalArgumentException("端口 " + port + "：" + localFrpsSafetyError);
+					}
 					if (isTcpChecked && !existingProfileKeys.contains(FrpProfileKey.from(port, "tcp"))) {
-						newProfiles.add(createBatchProfile(serverAddr, serverPort, token, port, localIp,
-														 tagTemplate, "tcp"));
+						newProfiles.add(createBatchProfile(serverAddr, serverPort, token, port, localIp, localPort,
+															 tagTemplate, "tcp"));
 					}
 					if (isUdpChecked && !existingProfileKeys.contains(FrpProfileKey.from(port, "udp"))) {
-						newProfiles.add(createBatchProfile(serverAddr, serverPort, token, port, localIp,
-														 tagTemplate, "udp"));
+						newProfiles.add(createBatchProfile(serverAddr, serverPort, token, port, localIp, localPort,
+															 tagTemplate, "udp"));
 					}
 				}
 
@@ -1224,15 +1510,33 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 				new MaterialAlertDialogBuilder(this).setTitle("创建成功")
 					.setMessage(newProfiles.size() + " 个新端口配置已暂存。请点击菜单中的 '应用更改' 以将它们写入服务器。")
 					.setPositiveButton("好的", null).show();
+				batchCreateDialog.dismiss();
 
 			} catch (Exception e) {
 				showErrorDialog("输入错误", e.getMessage());
 			}
-		}).show();
+		}));
+		batchCreateDialog.show();
+	}
+
+	private int[] parsePortRange(String value, String label) {
+		String[] parts = value == null ? new String[0] : value.trim().split("-");
+		if (parts.length != 2) throw new IllegalArgumentException(label + "格式错误，应为 '开始-结束'。");
+		try {
+			int start = Integer.parseInt(parts[0].trim());
+			int end = Integer.parseInt(parts[1].trim());
+			if (start < 1 || end > 65535 || start > end) {
+				throw new IllegalArgumentException(label + "无效，必须在 1-65535 之间，且开始端口不能大于结束端口。");
+			}
+			return new int[] {start, end};
+		} catch (NumberFormatException exception) {
+			throw new IllegalArgumentException(label + "格式错误，应为数字端口范围。");
+		}
 	}
 
 	private FrpProfile createBatchProfile(String serverAddr, int serverPort, String token, int port, String localIp,
-										 String tagTemplate, String protocol) {
+											 int localPort,
+											 String tagTemplate, String protocol) {
 		FrpProfile p = new FrpProfile();
 		p.setServerAddr(serverAddr);
 		p.setServerPort(serverPort);
@@ -1241,7 +1545,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 
 		p.setRemotePort(port);
 		p.setLocalIp(localIp);
-		p.setLocalPort(port);
+		p.setLocalPort(localPort);
 		p.setProtocol(protocol);
 
 		if (tagTemplate.contains("[P]")) {
@@ -1276,8 +1580,9 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 		View dialogView = inflater.inflate(R.layout.dialog_material_input, null);
 		final TextInputEditText input = dialogView.findViewById(R.id.text_input_edit_text);
 
-		new MaterialAlertDialogBuilder(this).setTitle(title).setView(dialogView)
-			.setPositiveButton(operationType.equals("delete") ? "删除" : "执行", (dialog, which) -> {
+		final AlertDialog rangeDialog = new MaterialAlertDialogBuilder(this).setTitle(title).setView(dialogView)
+			.setPositiveButton(operationType.equals("delete") ? "删除" : "执行", null).setNegativeButton("取消", null).create();
+		rangeDialog.setOnShowListener(ignored -> rangeDialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
 			String range = input.getText().toString().trim();
 			if (range.isEmpty()) {
 				Toast.makeText(FrpManagerActivity.this, "请输入端口范围或 'all'", Toast.LENGTH_SHORT).show();
@@ -1285,12 +1590,14 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 			}
 
 			List<FrpProfile> targetProfiles = parseRangeToProfiles(range, operationType);
-			if (targetProfiles != null && !targetProfiles.isEmpty()) {
-				confirmAndExecuteBatchOperation(operationType, targetProfiles);
+				if (targetProfiles != null && !targetProfiles.isEmpty()) {
+					rangeDialog.dismiss();
+					confirmAndExecuteBatchOperation(operationType, targetProfiles);
 			} else if (targetProfiles != null) {
 				Toast.makeText(this, "在指定范围内未找到可操作的端口", Toast.LENGTH_SHORT).show();
 			}
-		}).setNegativeButton("取消", null).show();
+		}));
+		rangeDialog.show();
 	}
 
 	private List<FrpProfile> parseRangeToProfiles(String range, String operationType) {
@@ -1299,16 +1606,18 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 		switch (operationType) {
 			case "start" :
 			case "restart" :
-				filter = p -> !"运行中".equals(p.getStatus()) && !p.isModified();
+				filter = p -> !p.getStatus().startsWith("运行中") && canOperateRemotely(p);
 				break;
 			case "stop" :
-				filter = p -> "运行中".equals(p.getStatus()) && !p.isModified();
+				filter = p -> p.getStatus().startsWith("运行中") && canOperateRemotely(p);
 				break;
 			case "delete" :
+				filter = profile -> profile.isPersisted() || profile.isModified();
+				break;
 			case "firewall-allow" :
 			case "firewall-block" :
 			default :
-				filter = p -> true;
+				filter = this::canOperateRemotely;
 				break;
 		}
 
@@ -1369,10 +1678,34 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 															 + (p.getTag() != null && !p.getTag().isEmpty() ? " (" + p.getTag() + ")" : ""))
 			.collect(Collectors.toList()));
 
+		final List<FrpProfile> selectedTargets = new ArrayList<>(targets);
 		new MaterialAlertDialogBuilder(this).setTitle(title).setAdapter(arrayAdapter, null)
 			.setNegativeButton("取消", null).setPositiveButton(positiveButtonText, (d, w) -> {
-			executeBatchOperationWithLogDialog(operationType, targets);
+			if ("delete".equals(operationType)) executeDeleteSelection(selectedTargets);
+			else executeBatchOperationWithLogDialog(operationType, selectedTargets);
 		}).show();
+	}
+
+	private void executeDeleteSelection(List<FrpProfile> selectedTargets) {
+		List<FrpProfile> localDrafts = selectedTargets.stream().filter(profile -> !profile.isPersisted())
+			.collect(Collectors.toList());
+		List<FrpProfile> remoteTargets = selectedTargets.stream().filter(FrpProfile::isPersisted)
+			.collect(Collectors.toList());
+		if (!localDrafts.isEmpty()) {
+			pendingChangesProfiles.removeIf(draft -> localDrafts.stream()
+				.anyMatch(selected -> profilesReferToSameResource(draft, selected)));
+			allProfiles.removeIf(profile -> localDrafts.stream()
+				.anyMatch(selected -> profilesReferToSameResource(profile, selected)));
+			PendingChangesStore.save(this, pendingChangesProfiles);
+			updatePendingChangesMenu();
+			applyFilters();
+		}
+		if (remoteTargets.isEmpty()) {
+			Toast.makeText(this, "已删除 " + localDrafts.size() + " 个待应用配置", Toast.LENGTH_SHORT).show();
+			exitSelectionMode();
+			return;
+		}
+		executeBatchOperationWithLogDialog("delete", remoteTargets);
 	}
 
 	private void executeBatchOperationWithLogDialog(final String operationType, final List<FrpProfile> targets) {
@@ -1391,19 +1724,38 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 			}
 
 			finalTargets.forEach(profile -> {
-				lockedProfiles.add(FrpProfileKey.from(profile));
+				lockedProfiles.addAll(profileIdentityKeys(profile));
 				runOnUiThread(() -> updateProfileStatusInUi(profile, getPendingStatus(operationType)));
 			});
 
 			try {
-				BatchOperationResult result = repository.executeBatchOperation(operationType, finalTargets, firewallManager);
-				appendBatchOperationLogs(logDialog, result);
-				applyBatchOperationStatuses(operationType, result);
-			} catch (IOException e) {
-				logDialog.append("\n\n###### 操作失败! ######", "error");
-				logDialog.append("错误详情: " + e.getMessage(), "error");
-			} finally {
-				finalTargets.forEach(profile -> lockedProfiles.remove(FrpProfileKey.from(profile)));
+					BatchOperationResult result = repository.executeBatchOperation(operationType, finalTargets, firewallManager);
+					appendBatchOperationLogs(logDialog, result);
+					applyBatchOperationStatuses(operationType, result);
+					syncLifecycleFirewallRules(logDialog, operationType, result, finalTargets);
+					if ("delete".equals(operationType)) {
+						Set<String> deletedKeys = result.getStatusByProfileKey().entrySet().stream()
+							.filter(entry -> entry.getValue() == PortExecutionStatus.SUCCESS)
+							.map(Map.Entry::getKey).collect(Collectors.toSet());
+						List<FrpProfile> deletedProfiles = finalTargets.stream()
+							.filter(profile -> deletedKeys.contains(FrpProfileKey.from(profile))).collect(Collectors.toList());
+						pendingChangesProfiles.removeIf(draft -> deletedProfiles.stream()
+							.anyMatch(deleted -> profilesReferToSameResource(draft, deleted)));
+						PendingChangesStore.save(this, pendingChangesProfiles);
+					}
+				} catch (IOException e) {
+					logDialog.append("\n\n###### 操作失败! ######", "error");
+					logDialog.append("错误详情: " + e.getMessage(), "error");
+					if (("start".equals(operationType) || "restart".equals(operationType)) && isFirewallReady()) {
+						try {
+							syncFirewallRules(logDialog, "block", finalTargets);
+						} catch (IOException firewallException) {
+							logDialog.append("[防火墙错误] 启动结果未知，且遗留规则清理失败："
+								+ firewallException.getMessage(), "error");
+						}
+					}
+				} finally {
+				finalTargets.forEach(profile -> lockedProfiles.removeAll(profileIdentityKeys(profile)));
 				runOnUiThread(() -> {
 					logDialog.setTitle("操作完成");
 					logDialog.enableCloseButton(true);
@@ -1429,7 +1781,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 			case "allow" :
 				return "防火墙放行";
 			case "block" :
-				return "防火墙阻止";
+				return "撤销本工具防火墙放行";
 			default :
 				return "操作";
 		}
@@ -1437,31 +1789,41 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 
 	private void applyChangesOnServer(final List<FrpProfile> profilesToApply) {
 		OperationLogDialog logDialog = new OperationLogDialog(this, "应用更改中...", false);
-		profilesToApply.forEach(profile -> lockedProfiles.add(FrpProfileKey.from(profile)));
+		profilesToApply.forEach(profile -> lockedProfiles.addAll(profileIdentityKeys(profile)));
+		final Set<String> successfulApplyKeys = Collections.synchronizedSet(new HashSet<>());
 
 		executor.execute(() -> {
 			boolean hasError = false;
 			try {
 				logDialog.append("准备将 " + profilesToApply.size() + " 项配置写入服务器...", "info");
 				logDialog.append("------------------------------------------", "info");
-				if (isFirewallReady()) {
-					logDialog.append("[防火墙日志] 防火墙管理已启用，检测到类型: " + firewallManager.getType(), "info");
+					if (isFirewallReady()) {
+						logDialog.append("[防火墙日志] 已启用 " + firewallManager.getType()
+							+ " 联动；应用配置不会放行端口，启动注册成功后才会放行。", "info");
 				} else if (settingsManager.isFirewallManaged()) {
 					logDialog.append("[防火墙日志] 防火墙管理已启用，但未在服务器上检测到支持的类型。", "error");
 				}
 
-				ApplyChangesResult result = repository.applyChanges(profilesToApply, firewallManager);
+					ApplyChangesResult result = repository.applyChanges(profilesToApply, firewallManager);
+					successfulApplyKeys.addAll(result.getSuccessfulProfileKeys());
+					List<FrpProfile> renamedOldFirewallTargets = profilesToApply.stream()
+						.filter(profile -> successfulApplyKeys.contains(FrpProfileKey.from(profile))
+							&& profile.hasPersistedIdentityChange())
+						.map(this::persistedFirewallIdentity).collect(Collectors.toList());
+					if (!renamedOldFirewallTargets.isEmpty() && isFirewallReady()) {
+						syncFirewallRules(logDialog, "block", renamedOldFirewallTargets);
+					}
 				logDialog.append("------------------------------------------", "info");
-				logDialog.append("执行命令:\n" + result.getCommand(), "info");
+					logDialog.append("执行操作: " + result.getCommand(), "info");
 				logDialog.append("------------------------------------------", "info");
-				appendCommandOutput(logDialog, result);
-				logDialog.append("------------------------------------------", "success");
+					appendCommandOutput(logDialog, result);
+					logDialog.append("------------------------------------------", "success");
 				logDialog.append("\n正在验证配置文件是否已创建...", "info");
 
-				if (result.isSuccessful()) {
+						if (result.isSuccessful()) {
 					logDialog.append("验证成功！所有配置文件均已写入服务器。", "success");
 					logDialog.append("\n所有更改已成功应用！请手动启动或重启相关服务以使配置生效。", "success");
-				} else {
+					} else {
 					hasError = true;
 					for (String failedProfileKey : result.getFailedProfileKeys()) {
 						logDialog.append(
@@ -1469,24 +1831,23 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 							"error"
 						);
 					}
-					logDialog.append("\n部分或全部配置应用失败！请检查以上日志。", "error");
+						logDialog.append("\n部分或全部配置应用失败！成功项将保留，失败项仍保留在待应用列表。", "error");
 				}
 			} catch (IOException e) {
 				hasError = true;
 				logDialog.append("\n\n###### 应用更改失败! ######", "error");
 				logDialog.append("错误详情: " + e.getMessage(), "error");
-			} finally {
-				profilesToApply.forEach(profile -> lockedProfiles.remove(FrpProfileKey.from(profile)));
+					} finally {
+				profilesToApply.forEach(profile -> lockedProfiles.removeAll(profileIdentityKeys(profile)));
 				boolean finalHasError = hasError;
 				runOnUiThread(() -> {
 					logDialog.setTitle("操作完成");
 					logDialog.enableCloseButton(true);
-					if (!finalHasError) {
-						pendingChangesProfiles.clear();
+						pendingChangesProfiles.removeIf(p -> successfulApplyKeys.contains(FrpProfileKey.from(p)));
+						PendingChangesStore.save(this, pendingChangesProfiles);
 						updatePendingChangesMenu();
 						loadFrpProfilesFromServer();
-						logDialog.dismissDelayed(2500);
-					}
+						if (!finalHasError) logDialog.dismissDelayed(2500);
 				});
 			}
 		});
@@ -1511,8 +1872,8 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 			Toast.makeText(this, "未检测到支持的防火墙，无法操作。", Toast.LENGTH_SHORT).show();
 			return;
 		}
-		if (!settingsManager.isFirewallManaged()) {
-			Toast.makeText(this, "防火墙管理未在设置中启用。", Toast.LENGTH_LONG).show();
+		if (!isFirewallReady()) {
+			Toast.makeText(this, "防火墙通道尚未就绪，请确认目标 SSH 地址和主机指纹。", Toast.LENGTH_LONG).show();
 			return;
 		}
 
@@ -1527,7 +1888,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 		tvType.setText("防火墙类型: " + firewallManager.getType());
 		tvStatus.setText("当前状态: " + profile.getFirewallStatus());
 
-		if ("已放行".equals(profile.getFirewallStatus())) {
+		if (profile.isFirewallAllowed()) {
 			tvStatus.setTextColor(ContextCompat.getColor(this, R.color.status_running));
 		} else {
 			tvStatus.setTextColor(ContextCompat.getColor(this, R.color.status_stopped));
@@ -1535,12 +1896,12 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 
 		new MaterialAlertDialogBuilder(this).setView(dialogView)
 			.setPositiveButton("放行端口", (d, w) -> executeSingleFirewallOperation(profile, "allow"))
-		.setNegativeButton("阻止端口", (d, w) -> executeSingleFirewallOperation(profile, "block"))
+		.setNegativeButton("撤销本工具放行", (d, w) -> executeSingleFirewallOperation(profile, "block"))
 		.setNeutralButton("取消", null).show();
 	}
 
 	private void executeSingleFirewallOperation(final FrpProfile profile, final String operation) {
-		String opName = "allow".equals(operation) ? "放行" : "阻止";
+		String opName = "allow".equals(operation) ? "放行" : "撤销本工具放行";
 		OperationLogDialog logDialog = new OperationLogDialog(
 			this,
 			opName + "端口 " + getProfileDisplayName(profile) + "...",
@@ -1553,7 +1914,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 				logDialog.append("目标端口: " + getProfileDisplayName(profile), "info");
 				CommandExecutionResult result = repository.executeSingleFirewallOperation(profile, operation, firewallManager);
 				logDialog.append("------------------------------------------", "info");
-				logDialog.append("组合的服务器命令:\n" + result.getCommand(), "info");
+					logDialog.append("执行操作: " + result.getCommand(), "info");
 				logDialog.append("------------------------------------------", "info");
 				appendCommandOutput(logDialog, result);
 				logDialog.append("------------------------------------------", "success");
@@ -1572,16 +1933,17 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 	}
 
 	private void showBatchFirewallOperationDialog(final String operationType) {
-		String title = "allow".equals(operationType) ? "批量放行防火墙端口" : "批量阻止防火墙端口";
-		String buttonText = "allow".equals(operationType) ? "全部放行" : "全部阻止";
+		String title = "allow".equals(operationType) ? "批量放行防火墙端口" : "批量撤销本工具放行";
+		String buttonText = "allow".equals(operationType) ? "全部放行" : "全部撤销";
 
 		LayoutInflater inflater = this.getLayoutInflater();
 		View dialogView = inflater.inflate(R.layout.dialog_material_input, null);
 		final TextInputEditText input = dialogView.findViewById(R.id.text_input_edit_text);
 		input.setHint("输入端口范围 (如 1000-2000) 或 all");
 
-		new MaterialAlertDialogBuilder(this).setTitle(title).setView(dialogView)
-			.setPositiveButton(buttonText, (dialog, which) -> {
+		final AlertDialog firewallRangeDialog = new MaterialAlertDialogBuilder(this).setTitle(title).setView(dialogView)
+			.setPositiveButton(buttonText, null).setNegativeButton("取消", null).create();
+		firewallRangeDialog.setOnShowListener(ignored -> firewallRangeDialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
 			String range = input.getText().toString().trim();
 			if (range.isEmpty()) {
 				Toast.makeText(FrpManagerActivity.this, "请输入端口范围或 'all'", Toast.LENGTH_SHORT).show();
@@ -1589,12 +1951,14 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 			}
 			String op = "allow".equals(operationType) ? "firewall-allow" : "firewall-block";
 			List<FrpProfile> targetProfiles = parseRangeToProfiles(range, op);
-			if (targetProfiles != null && !targetProfiles.isEmpty()) {
-				confirmAndExecuteBatchFirewallOperation(operationType, targetProfiles);
+				if (targetProfiles != null && !targetProfiles.isEmpty()) {
+					firewallRangeDialog.dismiss();
+					confirmAndExecuteBatchFirewallOperation(operationType, targetProfiles);
 			} else if (targetProfiles != null) {
 				Toast.makeText(this, "在指定范围内未找到可操作的端口", Toast.LENGTH_SHORT).show();
 			}
-		}).setNegativeButton("取消", null).show();
+		}));
+		firewallRangeDialog.show();
 	}
 
 	private void confirmAndExecuteBatchFirewallOperation(String operationType, List<FrpProfile> targets) {
@@ -1604,9 +1968,9 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 		}
 
 		String title = "allow".equals(operationType)
-			? "确认放行以下 " + targets.size() + " 个端口？"
-			: "确认阻止以下 " + targets.size() + " 个端口？";
-		String positiveButtonText = "allow".equals(operationType) ? "全部放行" : "全部阻止";
+				? "确认放行以下 " + targets.size() + " 个端口？"
+				: "确认撤销以下 " + targets.size() + " 个本工具规则？这不等于主动阻断端口。";
+		String positiveButtonText = "allow".equals(operationType) ? "全部放行" : "全部撤销";
 
 		ArrayAdapter<String> arrayAdapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1,
 															 targets.stream()
@@ -1632,11 +1996,11 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 				logDialog.append("防火墙类型: " + firewallManager.getType(), "info");
 				CommandExecutionResult result = repository.executeBatchFirewallOperation(operationType, targets, firewallManager);
 				logDialog.append("------------------------------------------", "info");
-				logDialog.append("最终组合的服务器命令:\n" + result.getCommand(), "info");
+					logDialog.append("执行操作: " + result.getCommand(), "info");
 				logDialog.append("------------------------------------------", "info");
 				appendCommandOutput(logDialog, result);
 				logDialog.append("------------------------------------------", "success");
-				logDialog.append("\n" + getOperationName(operationType) + " 命令已完成！", "success");
+					logDialog.append("\n" + getOperationName(operationType) + " 命令已完成！", "success");
 			} catch (IOException e) {
 				logDialog.append("\n\n###### 操作失败! ######", "error");
 				logDialog.append("错误详情: " + e.getMessage(), "error");
@@ -1669,6 +2033,12 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 		adapter.enterSelectionMode();
 		fabAddPort.hide();
 		batchActionsLayout.setVisibility(View.VISIBLE);
+		if (ValueAnimator.areAnimatorsEnabled()) {
+			batchActionsLayout.setAlpha(0f);
+			batchActionsLayout.setTranslationY(24f * getResources().getDisplayMetrics().density);
+			batchActionsLayout.animate().alpha(1f).translationY(0f).setDuration(260L)
+				.setInterpolator(new DecelerateInterpolator(1.7f)).start();
+		}
 		if (getSupportActionBar() != null) {
 			getSupportActionBar().setTitle("已选择 0 项");
 			getSupportActionBar().setDisplayHomeAsUpEnabled(false);
@@ -1681,10 +2051,11 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 		isInSelectionMode = false;
 		adapter.exitSelectionMode();
 		fabAddPort.show();
+		batchActionsLayout.animate().cancel();
 		batchActionsLayout.setVisibility(View.GONE);
 		if (getSupportActionBar() != null) {
 			getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-			getSupportActionBar().setTitle("FRP 端口管理");
+			getSupportActionBar().setTitle("端口矩阵");
 		}
 		invalidateOptionsMenu();
 	}
@@ -1722,6 +2093,7 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 		}
 		final Map<String, Boolean> selectionState = adapter.getSelectionStateByProfileKey();
 		final List<FrpProfile> currentProfiles = new ArrayList<>(this.allProfiles);
+		showSyncIndicator();
 
 		executor.execute(() -> {
 			try {
@@ -1729,7 +2101,8 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 					selectionState,
 					currentProfiles,
 					new ArrayList<>(pendingChangesProfiles),
-					new HashSet<>(lockedProfiles)
+					new HashSet<>(lockedProfiles),
+					firewallManager
 				);
 				runOnUiThread(() -> {
 					allProfiles.clear();
@@ -1739,14 +2112,14 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 						Comparator.comparingInt(FrpProfile::getRemotePort).thenComparing(FrpProfile::getProtocol)
 					);
 					applyFilters();
-					hideLoadingDialog();
+					hideSyncIndicator();
 					updatePendingChangesMenu();
 				});
 			} catch (final Exception e) {
 				e.printStackTrace();
 				Log.e(TAG, "Failed to load profiles from server.", e);
 				runOnUiThread(() -> {
-					hideLoadingDialog();
+					hideSyncIndicator();
 					showErrorDialog("加载失败", "无法连接到服务器或连接已断开。\n\n错误: " + e.getMessage());
 					checkEmptyState();
 				});
@@ -1760,10 +2133,16 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 		final TextView contentTextView = dialogView.findViewById(R.id.log_text_view);
 		final ScrollView scrollView = dialogView.findViewById(R.id.log_scroll_view);
 		final Button copyButton = dialogView.findViewById(R.id.btn_copy_log);
+		final LinearProgressIndicator progressIndicator = dialogView.findViewById(R.id.log_progress_indicator);
+		final TextView statusLabel = dialogView.findViewById(R.id.log_status_label);
+		final TextView statusDetail = dialogView.findViewById(R.id.log_status_detail);
 
 		contentTextView.setTextIsSelectable(true);
 		contentTextView.setMovementMethod(ScrollingMovementMethod.getInstance());
 		contentTextView.setText("正在从服务器加载配置文件...");
+		statusLabel.setText("正在读取配置");
+		statusDetail.setText("敏感字段会在展示和复制前自动隐藏");
+		progressIndicator.setVisibility(View.VISIBLE);
 
 		final AlertDialog configDialog = new MaterialAlertDialogBuilder(this)
 			.setTitle("配置文件: port_" + profile.getRemotePort() + "_" + profile.getProtocol()).setView(dialogView)
@@ -1785,15 +2164,25 @@ public class FrpManagerActivity extends AppCompatActivity implements FrpProfileA
 			try {
 				final String fileContent = repository.loadConfigFile(profile);
 
-				runOnUiThread(() -> {
-					contentTextView.setText(fileContent.trim().isEmpty() ? "配置文件为空或读取失败。" : fileContent);
-					copyButton.setEnabled(!fileContent.trim().isEmpty());
+					runOnUiThread(() -> {
+					String safeContent = SensitiveDataRedactor.redact(fileContent);
+					contentTextView.setText(safeContent.trim().isEmpty() ? "配置文件为空或读取失败。" : safeContent);
+					copyButton.setEnabled(!safeContent.trim().isEmpty());
+					progressIndicator.setVisibility(View.GONE);
+					statusLabel.setText(safeContent.trim().isEmpty() ? "内容为空" : "配置已加载");
+					statusLabel.setTextColor(ContextCompat.getColor(FrpManagerActivity.this,
+						safeContent.trim().isEmpty() ? R.color.status_pending : R.color.status_running));
+					statusDetail.setText("敏感字段已隐藏，可选择或复制当前内容");
 					scrollView.post(() -> scrollView.fullScroll(View.FOCUS_UP));
 				});
 			} catch (IOException e) {
 				runOnUiThread(() -> {
 					contentTextView.setText("加载配置文件失败:\n" + e.getMessage());
 					copyButton.setEnabled(false);
+					progressIndicator.setVisibility(View.GONE);
+					statusLabel.setText("加载失败");
+					statusLabel.setTextColor(ContextCompat.getColor(FrpManagerActivity.this, R.color.status_stopped));
+					statusDetail.setText("连接或远程文件读取异常");
 				});
 			}
 		});

@@ -1,11 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="status_running">#4CAF50</color>
-	<color name="status_stopped">#E57373</color>
-	<color name="status_disabled">#757575</color>
-	<color name="status_pending">#FFC107</color>
-	<color name="pending_changes_background">#FFFDE7</color>
-	<color name="default_item_background">#FFFFFF</color>
-	<color name="search_highlight_color">#3300BFFF</color>
-	<color name="yellow_700">#FBC02D</color>
+    <color name="brand_primary">#087E70</color>
+    <color name="brand_on_primary">#FFFFFF</color>
+    <color name="brand_primary_container">#CDEFE8</color>
+    <color name="brand_on_primary_container">#073B34</color>
+    <color name="brand_secondary">#526863</color>
+    <color name="brand_on_secondary">#FFFFFF</color>
+    <color name="brand_secondary_container">#D8E8E4</color>
+    <color name="brand_on_secondary_container">#293B37</color>
+    <color name="brand_tertiary">#A05B00</color>
+    <color name="brand_on_tertiary">#FFFFFF</color>
+    <color name="brand_tertiary_container">#FFE1B7</color>
+    <color name="brand_on_tertiary_container">#4C2A00</color>
+
+    <color name="app_background">#F3F7F5</color>
+    <color name="app_on_background">#17211F</color>
+    <color name="app_surface">#FBFDFC</color>
+    <color name="app_surface_container">#EAF1EF</color>
+    <color name="app_surface_container_high">#E1EAE7</color>
+    <color name="app_on_surface">#17211F</color>
+    <color name="app_on_surface_variant">#53635F</color>
+    <color name="app_outline">#748580</color>
+    <color name="app_outline_variant">#C7D2CF</color>
+    <color name="toolbar_surface">#F8FBFA</color>
+    <color name="dashboard_card">#F9FCFB</color>
+    <color name="grid_line">#1E9AACA6</color>
+    <color name="grid_major_line">#3191A39E</color>
+    <color name="grid_scan_line">#4D18A897</color>
+
+    <color name="status_running">#07856F</color>
+    <color name="status_stopped">#C43E3E</color>
+    <color name="status_disabled">#687975</color>
+    <color name="status_pending">#B66A00</color>
+    <color name="pending_changes_background">#FFF4DE</color>
+    <color name="default_item_background">#F9FCFB</color>
+    <color name="selection_background">#D7F1EB</color>
+    <color name="search_highlight_color">#3318A897</color>
+    <color name="yellow_700">#B66A00</color>
+    <color name="error_color">#B3261E</color>
+    <color name="error_container">#FFDAD6</color>
+    <color name="launcher_background">#073B34</color>
 </resources>

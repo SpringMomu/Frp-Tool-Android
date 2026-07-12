@@ -1,8 +1,14 @@
 package io.momu.frpmanager;
 
+import java.util.Locale;
 import java.util.Objects;
 
 public class FrpProfile {
+    public static final String FIREWALL_ALLOWED = "已放行";
+    public static final String FIREWALL_NOT_ALLOWED = "未放行";
+    public static final String FIREWALL_UNKNOWN = "状态未知";
+    public static final String FIREWALL_PENDING = "待应用";
+
     private String name;
     private String serverAddr;
     private int serverPort;
@@ -17,6 +23,16 @@ public class FrpProfile {
     private boolean isSelected = false;
     private boolean isModified = false;
     private String firewallStatus;
+    // Immutable remote resource identity discovered during loading.  Never infer it from display text.
+    private String sourcePath;
+    private String unitName;
+    private String rawConfigContent;
+    private int persistedRemotePort;
+    private String persistedProtocol;
+    private boolean legacy;
+    private boolean configFileDisabled;
+    private String proxyRegistrationState = "未知";
+    private String lastError;
     public FrpProfile() {
     }
     public String getName() { return name; }
@@ -47,6 +63,86 @@ public class FrpProfile {
     public void setModified(boolean modified) { this.isModified = modified; }
     public String getFirewallStatus() { return firewallStatus; }
     public void setFirewallStatus(String firewallStatus) { this.firewallStatus = firewallStatus; }
+    public boolean isFirewallAllowed() { return FIREWALL_ALLOWED.equals(firewallStatus); }
+    public String getSourcePath() { return sourcePath; }
+    public void setSourcePath(String sourcePath) { this.sourcePath = sourcePath; }
+    public String getUnitName() { return unitName; }
+    public void setUnitName(String unitName) { this.unitName = unitName; }
+    public String getRawConfigContent() { return rawConfigContent; }
+    public void setRawConfigContent(String rawConfigContent) { this.rawConfigContent = rawConfigContent; }
+    public int getPersistedRemotePort() { return persistedRemotePort; }
+    public void setPersistedRemotePort(int persistedRemotePort) { this.persistedRemotePort = persistedRemotePort; }
+    public String getPersistedProtocol() { return persistedProtocol; }
+    public void setPersistedProtocol(String persistedProtocol) { this.persistedProtocol = persistedProtocol; }
+    public boolean isLegacy() { return legacy; }
+    public void setLegacy(boolean legacy) { this.legacy = legacy; }
+    public boolean isConfigFileDisabled() { return configFileDisabled; }
+    public void setConfigFileDisabled(boolean disabled) { this.configFileDisabled = disabled; }
+    public boolean isPersisted() { return sourcePath != null && !sourcePath.trim().isEmpty(); }
+    public boolean hasPersistedIdentity() {
+        return isPersisted() && persistedRemotePort > 0 && persistedProtocol != null && !persistedProtocol.trim().isEmpty();
+    }
+    public boolean hasPersistedIdentityChange() {
+        return hasPersistedIdentity() && (persistedRemotePort != remotePort
+            || !persistedProtocol.equalsIgnoreCase(protocol));
+    }
+    public String getPersistedIdentityKey() {
+        return hasPersistedIdentity() ? persistedRemotePort + "/" + persistedProtocol.toLowerCase(Locale.US) : "";
+    }
+    public String getProxyRegistrationState() { return proxyRegistrationState; }
+    public void setProxyRegistrationState(String state) { this.proxyRegistrationState = state; }
+    public String getLastError() { return lastError; }
+    public void setLastError(String lastError) { this.lastError = lastError; }
+
+    /**
+     * A managed frpc and frps run on the same SSH host. These combinations
+     * would either target frps itself or send a proxy listener back to itself.
+     */
+    public static String localFrpsSafetyError(String serverAddr, int serverPort,
+        String localIp, int localPort, int remotePort) {
+        if (!isLoopbackAddress(serverAddr)) return null;
+        if (serverPort > 0 && remotePort == serverPort) {
+            return "远程端口不能使用受管 frps 控制端口 " + serverPort + "。";
+        }
+        if (localPort > 0 && remotePort > 0 && localPort == remotePort) {
+            return "受管同机 frps 不允许本地端口与远程端口相同，否则会形成转发回环。"
+                + "请保留本地端口 " + localPort + "，并把远程端口改为其他未占用端口。";
+        }
+        if (serverPort > 0 && localPort == serverPort) {
+            return "本地目标不能使用受管 frps 控制端口 " + serverPort + "，以免暴露控制通道。";
+        }
+        return null;
+    }
+
+    public String getLocalFrpsSafetyError() {
+        return localFrpsSafetyError(serverAddr, serverPort, localIp, localPort, remotePort);
+    }
+
+    public String getManagedLocalFrpsSafetyError() {
+        return isLoopbackAddress(serverAddr) ? getLocalFrpsSafetyError() : null;
+    }
+
+    public static boolean isLoopbackAddress(String address) {
+        if (address == null) return false;
+        String normalized = address.trim().toLowerCase(Locale.US);
+        if (normalized.startsWith("[") && normalized.endsWith("]")) {
+            normalized = normalized.substring(1, normalized.length() - 1);
+        }
+        return "localhost".equals(normalized) || "localhost.".equals(normalized)
+            || "::1".equals(normalized) || normalized.startsWith("127.");
+    }
+
+    public void copyRemoteIdentityFrom(FrpProfile other) {
+        if (other == null) return;
+        sourcePath = other.sourcePath;
+        unitName = other.unitName;
+        rawConfigContent = other.rawConfigContent;
+        persistedRemotePort = other.persistedRemotePort > 0 ? other.persistedRemotePort : other.remotePort;
+        persistedProtocol = other.persistedProtocol == null || other.persistedProtocol.trim().isEmpty()
+            ? other.protocol : other.persistedProtocol;
+        legacy = other.legacy;
+        configFileDisabled = other.configFileDisabled;
+    }
     public boolean hasFunctionalChanges(FrpProfile other) {
         if (other == null) return true;
         return this.remotePort != other.remotePort ||
@@ -67,6 +163,7 @@ public class FrpProfile {
         this.setProtocol(other.getProtocol());
         this.setTag(other.getTag());
         this.setProxyProtocolVersion(other.getProxyProtocolVersion());
+        copyRemoteIdentityFrom(other);
     }
     @Override
     public boolean equals(Object o) {

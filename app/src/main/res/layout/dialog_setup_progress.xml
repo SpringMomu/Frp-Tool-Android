@@ -10,7 +10,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="正在配置服务器..."
-        android:textAppearance="?attr/textAppearanceHeadline6" />
+        android:textAppearance="?attr/textAppearanceTitleLarge" />
 
     <TextView
         android:id="@+id/tv_setup_status"
@@ -18,7 +18,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="20dp"
         android:text="请稍候..."
-        android:textAppearance="?attr/textAppearanceBody2" />
+        android:textAppearance="?attr/textAppearanceBodyMedium" />
 
     <com.google.android.material.progressindicator.LinearProgressIndicator
         android:id="@+id/progress_indicator_setup"

@@ -26,7 +26,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="环境初始化向导"
-                android:textAppearance="?attr/textAppearanceHeadline6" />
+                android:textAppearance="?attr/textAppearanceTitleLarge" />
 
             <TextView
                 android:layout_width="wrap_content"
@@ -34,7 +34,7 @@
                 android:layout_marginTop="8dp"
                 android:text="将为您自动完成以下服务器配置："
                 android:textAlignment="center"
-                android:textAppearance="?attr/textAppearanceBody2" />
+                android:textAppearance="?attr/textAppearanceBodyMedium" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -61,7 +61,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="创建 FRP 工作目录和配置文件"
-                        android:textAppearance="?attr/textAppearanceBody1" />
+                        android:textAppearance="?attr/textAppearanceBodyLarge" />
                 </LinearLayout>
 
                 <LinearLayout
@@ -81,8 +81,8 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="部署 frpc 可执行文件"
-                        android:textAppearance="?attr/textAppearanceBody1" />
+                    android:text="通过 SFTP 上传匹配架构的 frpc + frps"
+                        android:textAppearance="?attr/textAppearanceBodyLarge" />
                 </LinearLayout>
 
                 <LinearLayout
@@ -101,8 +101,8 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="配置并启用 systemd 系统服务"
-                        android:textAppearance="?attr/textAppearanceBody1" />
+                    android:text="生成强鉴权并启动受管 frps/frpc 服务"
+                        android:textAppearance="?attr/textAppearanceBodyLarge" />
                 </LinearLayout>
             </LinearLayout>
         </LinearLayout>
@@ -122,14 +122,14 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="重要提示"
-                android:textAppearance="?attr/textAppearanceHeadline6" />
+                android:textAppearance="?attr/textAppearanceTitleLarge" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
                 android:text="开始前，请知晓以下操作将在您服务器上执行："
-                android:textAppearance="?attr/textAppearanceBody2" />
+                android:textAppearance="?attr/textAppearanceBodyMedium" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -149,7 +149,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="创建目录 /etc/frp/ 和 /etc/frp/conf.d/"
-                    android:textAppearance="?attr/textAppearanceBody1" />
+                    android:textAppearance="?attr/textAppearanceBodyLarge" />
             </LinearLayout>
 
             <LinearLayout
@@ -169,8 +169,8 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="上传 frpc 文件至 /usr/local/bin/"
-                    android:textAppearance="?attr/textAppearanceBody1" />
+	                android:text="上传 APK 内置 frpc 与 frps 至 /usr/local/bin/"
+                    android:textAppearance="?attr/textAppearanceBodyLarge" />
             </LinearLayout>
 
             <LinearLayout
@@ -190,8 +190,8 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="创建并启用 systemd 服务 frpc@.service"
-                    android:textAppearance="?attr/textAppearanceBody1" />
+	                android:text="创建 frps.service 与 frpc@.service"
+                    android:textAppearance="?attr/textAppearanceBodyLarge" />
             </LinearLayout>
 
             <LinearLayout
@@ -216,7 +216,7 @@
                     android:layout_height="wrap_content"
                     android:lineSpacingMultiplier="1.2"
                     android:text="此操作需要 root 权限，并会修改系统文件。"
-                    android:textAppearance="?attr/textAppearanceCaption" />
+                    android:textAppearance="?attr/textAppearanceBodySmall" />
             </LinearLayout>
         </LinearLayout>
 
@@ -233,7 +233,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="正在配置服务器..."
-                android:textAppearance="?attr/textAppearanceHeadline6" />
+                android:textAppearance="?attr/textAppearanceTitleLarge" />
 
             <TextView
                 android:id="@+id/tv_setup_status"
@@ -241,7 +241,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="24dp"
                 android:text="请稍候..."
-                android:textAppearance="?attr/textAppearanceBody1" />
+                android:textAppearance="?attr/textAppearanceBodyLarge" />
 
             <com.google.android.material.progressindicator.LinearProgressIndicator
                 android:id="@+id/progress_indicator_setup"
@@ -271,14 +271,14 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
                 android:text="配置完成！"
-                android:textAppearance="?attr/textAppearanceHeadline6" />
+                android:textAppearance="?attr/textAppearanceTitleLarge" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="服务器已准备就绪。"
-                android:textAppearance="?attr/textAppearanceBody1" />
+	            android:text="受管 frps、frpc、鉴权与防火墙联动均已就绪。"
+                android:textAppearance="?attr/textAppearanceBodyLarge" />
         </LinearLayout>
 
     </ViewAnimator>

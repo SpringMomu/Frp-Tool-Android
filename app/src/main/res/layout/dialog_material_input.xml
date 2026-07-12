@@ -8,7 +8,7 @@
 
     <com.google.android.material.textfield.TextInputLayout
         android:id="@+id/text_input_layout"
-        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+        style="@style/Widget.FrpManager.TextInputLayout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
 

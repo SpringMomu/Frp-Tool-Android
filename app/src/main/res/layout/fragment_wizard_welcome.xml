@@ -23,7 +23,7 @@
         android:layout_marginTop="16dp"
         android:text="检测到您的服务器尚未配置 FRP Manager 环境。\n此向导将自动为您完成所有必要的设置。"
         android:textAlignment="center"
-        android:textAppearance="?attr/textAppearanceBody1" />
+        android:textAppearance="?attr/textAppearanceBodyLarge" />
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btn_start_setup"

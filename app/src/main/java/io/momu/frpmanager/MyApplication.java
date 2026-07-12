@@ -12,8 +12,10 @@ public class MyApplication extends Application {
         setupBouncyCastle();
     }
 
-    private void setupBouncyCastle() {
-        Security.removeProvider("BC");
-        Security.insertProviderAt(new BouncyCastleProvider(), 1);
-    }
+	private void setupBouncyCastle() {
+		Security.removeProvider("BC");
+		// Keep platform crypto providers (especially AndroidKeyStore) ahead of BC.
+		// BC is only needed here for SSH PEM parsing and must not claim keystore ciphers.
+		Security.addProvider(new BouncyCastleProvider());
+	}
 }

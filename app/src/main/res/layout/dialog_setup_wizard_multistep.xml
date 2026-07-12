@@ -16,7 +16,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="服务器环境设置"
-            android:textAppearance="?attr/textAppearanceHeadline6" />
+            android:textAppearance="?attr/textAppearanceTitleLarge" />
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -43,7 +43,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="防火墙建议"
-            android:textAppearance="?attr/textAppearanceHeadline6" />
+            android:textAppearance="?attr/textAppearanceTitleLarge" />
         <TextView
             android:id="@+id/text_firewall_detected"
             android:layout_width="wrap_content"
@@ -67,7 +67,7 @@
                 android:textAlignment="center" />
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_install_ufw"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                style="@style/Widget.Material3.Button.OutlinedButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
@@ -91,13 +91,13 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="FRP 通用配置"
-            android:textAppearance="?attr/textAppearanceHeadline6" />
+	            android:text="高级：外部 frps 连接"
+            android:textAppearance="?attr/textAppearanceTitleLarge" />
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:hint="FRP服务器地址 (公网IP)">
+	            android:hint="外部 frps 地址（IP 或域名）">
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/et_frp_server_addr"
                 android:layout_width="match_parent"
@@ -107,7 +107,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:hint="FRP服务器端口 (默认7000)">
+	            android:hint="外部 frps 端口 (默认7000)">
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/et_frp_server_port"
                 android:layout_width="match_parent"
@@ -144,7 +144,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="正在配置服务器..."
-            android:textAppearance="?attr/textAppearanceHeadline6" />
+            android:textAppearance="?attr/textAppearanceTitleLarge" />
         <TextView
             android:id="@+id/tv_setup_status"
             android:layout_width="wrap_content"
@@ -176,7 +176,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="配置完成！"
-            android:textAppearance="?attr/textAppearanceHeadline6" />
+            android:textAppearance="?attr/textAppearanceTitleLarge" />
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

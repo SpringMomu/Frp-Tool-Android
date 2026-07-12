@@ -28,9 +28,9 @@ public final class FrpProfileFilter {
 
         if (!"all".equals(state.getFirewallFilter())) {
             if ("allowed".equals(state.getFirewallFilter())) {
-                filtered.removeIf(profile -> !"已放行".equals(profile.getFirewallStatus()));
+                filtered.removeIf(profile -> !profile.isFirewallAllowed());
             } else {
-                filtered.removeIf(profile -> "已放行".equals(profile.getFirewallStatus()));
+                filtered.removeIf(FrpProfile::isFirewallAllowed);
             }
         }
 

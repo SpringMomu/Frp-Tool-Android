@@ -16,14 +16,14 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="添加新端口映射"
-            android:textAppearance="?attr/textAppearanceHeadline6"
+            android:textAppearance="?attr/textAppearanceTitleLarge"
             android:layout_marginBottom="16dp"/>
 
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="8dp"
-            android:hint="FRP 服务器地址 (公网IP)">
+            android:hint="FRP 服务端地址">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/edit_text_server_addr"
@@ -99,6 +99,13 @@
                 android:inputType="number" />
 
         </com.google.android.material.textfield.TextInputLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="受管同机模式下，本地端口必须与远程端口不同。"
+            android:textAppearance="?attr/textAppearanceBodySmall" />
 
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"

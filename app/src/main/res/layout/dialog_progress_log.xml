@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
@@ -10,34 +11,37 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="正在执行操作..."
-        android:textSize="18sp"
+        android:textAppearance="?attr/textAppearanceTitleMedium"
+        android:textColor="@color/app_on_surface"
         android:textStyle="bold"
-        android:textColor="?android:attr/textColorPrimary"
         android:layout_marginBottom="16dp"/>
 
-    <ProgressBar
+    <com.google.android.material.progressindicator.LinearProgressIndicator
         android:id="@+id/log_progress"
-        style="?android:attr/progressBarStyleHorizontal"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="6dp"
         android:indeterminate="true"
-        android:layout_marginBottom="16dp"/>
+        android:layout_marginBottom="16dp"
+        app:trackCornerRadius="3dp"
+        app:trackThickness="6dp" />
 
     <ScrollView
         android:id="@+id/log_scrollview"
         android:layout_width="match_parent"
-        android:layout_height="240dp"
-        android:background="#1E1E1E"
-        android:padding="8dp">
+        android:layout_height="260dp"
+        android:background="@drawable/background_info_panel"
+        android:fillViewport="true">
 
         <TextView
             android:id="@+id/log_content"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:lineSpacingExtra="2dp"
+            android:padding="12dp"
             android:text=""
-            android:textColor="#FFFFFF"
+            android:textColor="@color/app_on_surface"
             android:textSize="12sp"
-            android:typeface="monospace"
             android:textIsSelectable="true"/>
     </ScrollView>
 

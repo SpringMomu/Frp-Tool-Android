@@ -11,7 +11,7 @@
         android:padding="24dp">
 
         <com.google.android.material.textfield.TextInputLayout
-            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+            style="@style/Widget.FrpManager.TextInputLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:hint="SSH 主机 (IP 或域名)"
@@ -26,7 +26,7 @@
         </com.google.android.material.textfield.TextInputLayout>
 
         <com.google.android.material.textfield.TextInputLayout
-            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+            style="@style/Widget.FrpManager.TextInputLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
@@ -43,7 +43,7 @@
         </com.google.android.material.textfield.TextInputLayout>
 
         <com.google.android.material.textfield.TextInputLayout
-            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+            style="@style/Widget.FrpManager.TextInputLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
@@ -67,7 +67,7 @@
 
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/layout_ssh_password"
-            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+            style="@style/Widget.FrpManager.TextInputLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
@@ -93,7 +93,7 @@
 
             <Button
                 android:id="@+id/btn_select_key"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                style="@style/Widget.Material3.Button.OutlinedButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
@@ -105,11 +105,11 @@
                 android:layout_height="wrap_content"
                 android:padding="8dp"
                 android:text="尚未选择文件"
-                android:textAppearance="?attr/textAppearanceCaption" />
+                android:textAppearance="?attr/textAppearanceBodySmall" />
 
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/layout_ssh_passphrase"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                style="@style/Widget.FrpManager.TextInputLayout"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
@@ -138,10 +138,10 @@
             android:id="@+id/switch_manage_firewall"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:checked="true"
+            android:checked="false"
             android:paddingStart="4dp"
             android:paddingEnd="4dp"
-            android:text="自动管理防火墙 (推荐)"
+            android:text="自动管理 FRP 端口防火墙"
             android:textAppearance="?attr/textAppearanceBodyLarge"
             app:useMaterialThemeColors="true" />
 
@@ -151,8 +151,37 @@
             android:layout_marginTop="4dp"
             android:paddingStart="8dp"
             android:paddingEnd="8dp"
-            android:text="勾选后，应用将自动检测并操作服务器的防火墙(支持firewalld, ufw, iptables)。"
-            android:textAppearance="?attr/textAppearanceCaption" />
+            android:text="留空时自动使用 FRP 服务地址；也可填入独立的 frps SSH 主机。启动/应用时自动放行，停止/删除时自动撤销本工具规则。"
+            android:textAppearance="?attr/textAppearanceBodySmall" />
+
+        <com.google.android.material.textfield.TextInputLayout
+            style="@style/Widget.FrpManager.TextInputLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:hint="frps 防火墙 SSH 主机（可选）">
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/et_frps_firewall_host"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="textUri"
+                android:maxLines="1" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            style="@style/Widget.FrpManager.TextInputLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:hint="frps 防火墙 SSH 端口">
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/et_frps_firewall_port"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:maxLines="1"
+                android:text="22" />
+        </com.google.android.material.textfield.TextInputLayout>
 
         <TextView
             android:id="@+id/tv_ssh_status"

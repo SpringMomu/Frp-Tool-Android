@@ -10,14 +10,18 @@ public class BatchOperationResult extends CommandExecutionResult {
     private final List<BatchOperationBlock> blocks;
     private final Map<String, PortExecutionStatus> statusByProfileKey;
 
-    public BatchOperationResult(
-        String command,
-        String output,
-        String summary,
+	public BatchOperationResult(
+		String command,
+		String output,
+		String errorOutput,
+		Integer exitCode,
+		String exitSignal,
+		boolean timedOut,
+		String summary,
         List<BatchOperationBlock> blocks,
         Map<String, PortExecutionStatus> statusByProfileKey
     ) {
-        super(command, output);
+		super(command, output, errorOutput, exitCode, exitSignal, timedOut);
         this.summary = summary;
         this.blocks = blocks == null ? Collections.emptyList() : blocks;
         this.statusByProfileKey = statusByProfileKey == null ? Collections.emptyMap() : statusByProfileKey;

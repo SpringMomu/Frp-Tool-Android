@@ -15,13 +15,13 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
             android:text="批量创建端口"
-            android:textAppearance="?attr/textAppearanceHeadline6" />
+            android:textAppearance="?attr/textAppearanceTitleLarge" />
 
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="8dp"
-            android:hint="FRP 服务器地址 (公网IP)">
+            android:hint="FRP 服务端地址">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/edit_text_server_addr"
@@ -86,6 +86,19 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
+            android:hint="本地端口范围 (例如 7000-7010)">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/edit_text_local_range"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="text" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
             android:hint="备注 (可选, [P] 会被替换为端口号)">
 
             <com.google.android.material.textfield.TextInputEditText
@@ -128,7 +141,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:text="注意：本地端口将与远程端口一一对应。"
+            android:text="本地端口范围留空时与远程端口一一对应；受管同机模式请填写不同范围。"
             android:textSize="12sp" />
 
     </LinearLayout>

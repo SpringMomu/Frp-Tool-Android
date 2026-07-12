@@ -18,7 +18,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:hint="端口号或范围 (例如: 6000 或 6000-6010)"
-        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+        style="@style/Widget.FrpManager.TextInputLayout">
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/edit_text_control_range"
             android:layout_width="match_parent"

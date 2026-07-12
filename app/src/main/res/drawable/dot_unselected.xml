@@ -3,7 +3,7 @@
     android:shape="oval"
     android:useLevel="false">
 
-    <solid android:color="#BDBDBD"/>
+    <solid android:color="@color/app_outline"/>
 
     <size
         android:width="8dp"

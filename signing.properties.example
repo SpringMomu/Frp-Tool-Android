@@ -1,0 +1,5 @@
+# Do not commit a keystore or its passwords. CI should inject these values as protected secrets.
+FRP_RELEASE_STORE_FILE=/secure/path/to/release.jks
+FRP_RELEASE_STORE_PASSWORD=replace-me
+FRP_RELEASE_KEY_ALIAS=replace-me
+FRP_RELEASE_KEY_PASSWORD=replace-me

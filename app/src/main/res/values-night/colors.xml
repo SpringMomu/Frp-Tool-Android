@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="brand_primary">#58D7C3</color>
+    <color name="brand_on_primary">#00382F</color>
+    <color name="brand_primary_container">#075E53</color>
+    <color name="brand_on_primary_container">#BDF5EA</color>
+    <color name="brand_secondary">#B7CCC6</color>
+    <color name="brand_on_secondary">#233430</color>
+    <color name="brand_secondary_container">#344A45</color>
+    <color name="brand_on_secondary_container">#D3E8E2</color>
+    <color name="brand_tertiary">#FFB85B</color>
+    <color name="brand_on_tertiary">#552F00</color>
+    <color name="brand_tertiary_container">#744300</color>
+    <color name="brand_on_tertiary_container">#FFDDB2</color>
+
+    <color name="app_background">#0D1413</color>
+    <color name="app_on_background">#DDE5E2</color>
+    <color name="app_surface">#121A18</color>
+    <color name="app_surface_container">#192321</color>
+    <color name="app_surface_container_high">#202C29</color>
+    <color name="app_on_surface">#DDE5E2</color>
+    <color name="app_on_surface_variant">#B6C5C1</color>
+    <color name="app_outline">#82938E</color>
+    <color name="app_outline_variant">#344540</color>
+    <color name="toolbar_surface">#101816</color>
+    <color name="dashboard_card">#151E1C</color>
+    <color name="grid_line">#264AAE9B</color>
+    <color name="grid_major_line">#3D4AAE9B</color>
+    <color name="grid_scan_line">#6658D7C3</color>
+
+    <color name="status_running">#58D7C3</color>
+    <color name="status_stopped">#FFB4AB</color>
+    <color name="status_disabled">#9AABA6</color>
+    <color name="status_pending">#FFB85B</color>
+    <color name="pending_changes_background">#332918</color>
+    <color name="default_item_background">#151E1C</color>
+    <color name="selection_background">#123D36</color>
+    <color name="search_highlight_color">#6658D7C3</color>
+    <color name="yellow_700">#FFB85B</color>
+    <color name="error_color">#FFB4AB</color>
+    <color name="error_container">#8C1D18</color>
+</resources>

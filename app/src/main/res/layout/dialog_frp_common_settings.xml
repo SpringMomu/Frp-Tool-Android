@@ -5,11 +5,18 @@
     android:orientation="vertical"
     android:padding="24dp">
 
-    <com.google.android.material.textfield.TextInputLayout
-        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+    <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="FRP服务器地址 (公网IP)">
+        android:layout_marginBottom="16dp"
+        android:text="一键部署会自动使用当前 SSH 主机上仅监听回环地址的受管 frps，无需手填。只有改用独立公网 frps 时才需要在这里覆盖默认连接；已有端口仍保留各自配置，可在管理页编辑。"
+        android:textAppearance="?attr/textAppearanceBodyMedium" />
+
+    <com.google.android.material.textfield.TextInputLayout
+        style="@style/Widget.FrpManager.TextInputLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="外部 frps 地址（IP 或域名）">
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/et_frp_server_addr"
             android:layout_width="match_parent"
@@ -17,11 +24,11 @@
     </com.google.android.material.textfield.TextInputLayout>
 
     <com.google.android.material.textfield.TextInputLayout
-        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+        style="@style/Widget.FrpManager.TextInputLayout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:hint="FRP服务器端口">
+        android:hint="外部 frps 绑定端口">
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/et_frp_server_port"
             android:layout_width="match_parent"
@@ -30,7 +37,7 @@
     </com.google.android.material.textfield.TextInputLayout>
 
     <com.google.android.material.textfield.TextInputLayout
-        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+        style="@style/Widget.FrpManager.TextInputLayout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
